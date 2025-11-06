@@ -1,54 +1,58 @@
 import streamlit as st
 import pandas as pd
-import time
 
-# 1. Smooth logo transition
-def logo_animation():
-    import streamlit.components.v1 as components
-    st.set_page_config(page_title="Incrolink Platform", page_icon="🟢", layout="wide")
-    # This uses CSS for fade-in animation
-    st.markdown("""
-        <style>
-        .logo-wrap { 
-            display: flex; justify-content: center; margin-top: 50px; 
-        }
-        .logo-img {
-            opacity: 0;
-            animation: fadeIn 2s ease-in forwards;
-        }
-        @keyframes fadeIn {
-            to { opacity: 1; }
-        }
-        </style>
-        <div class='logo-wrap'>
-            <img src='logoincrolink1.png' class='logo-img' width='220' />
-        </div>
-        """, unsafe_allow_html=True)
-    time.sleep(2)
-    st.markdown("---")
+COLUMNS_REQUIRED = [
+    "company", "nace", "ebit", "employees", "net income", "capex", "d&a",
+    "changes in wc", "lt debt", "st debt", "sh equity", "capital equity"
+]
 
-# 2. Single contact search (professionals1.xlsx as source)
-def show_contact_search():
-    st.title("Incrolink Contact Lookup")
+def normalize_columns(df):
+    # Try to map user file to required columns. Strict: looks for substring matches.
+    lower_cols = [c.lower() for c in df.columns]
+    col_map = {}
+    for required in COLUMNS_REQUIRED:
+        for i, col in enumerate(lower_cols):
+            if required in col.replace("_", " "):
+                col_map[df.columns[i]] = required
+                break
+    return df.rename(columns=col_map)
 
-    uploaded = st.file_uploader("Upload professionals1.xlsx for contact info", type=["xlsx"])
-    if uploaded:
-        df = pd.read_excel(uploaded)
-        st.success(f"Loaded {len(df)} contacts.")
-        name = st.text_input("Enter full name to search:", key="search_name")
-        if name:
-            match = df[df.apply(lambda row: name.lower() in str(row).lower(), axis=1)]
-            if not match.empty:
-                st.subheader("Contact Information")
-                st.write(match)
-            else:
-                st.warning("No contact found matching that name.")
-    else:
-        st.info("Please upload professionals1.xlsx.")
+def load_db():
+    file = st.file_uploader("Upload Excel DB", type=["xlsx"])
+    if not file:
+        st.warning("Please upload an Excel database with the required columns.")
+        return None
+    df = pd.read_excel(file)
+    df = normalize_columns(df)
+    missing = [c for c in COLUMNS_REQUIRED if c not in df.columns]
+    if missing:
+        st.error(f"Missing columns: {', '.join(missing)}")
+        return None
+    st.success(f"Loaded company database with {len(df)} rows.")
+    if st.checkbox("Preview data", False):
+        st.dataframe(df.head())
+    return df
+
+def show_search(df):
+    st.write("### Company Information Search")
+    name_query = st.text_input("Search company name (case-insensitive, substring allowed)")
+    if not name_query:
+        return
+    matches = df[df["company"].str.lower().str.contains(name_query.lower(), na=False)]
+    if matches.empty:
+        st.warning("No companies found.")
+        return
+    for i, r in matches.iterrows():
+        st.markdown("---")
+        for c in COLUMNS_REQUIRED:
+            st.write(f"**{c.title()}:** {r[c]}")
 
 def main():
-    logo_animation()
-    show_contact_search()
+    st.set_page_config(page_title="Incrolink Company Info", page_icon="🟢", layout="wide")
+    st.title("Incrolink Company Info Extractor")
+    df = load_db()
+    if df is not None:
+        show_search(df)
 
 if __name__ == "__main__":
     main()
