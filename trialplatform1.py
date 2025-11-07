@@ -69,12 +69,7 @@ def main():
     else:
         small_logo()
         st.title("Incrolink Company Info Extractor + DCF Automated")
-        # ... rest of your platform code here!
-
-if __name__ == "__main__":
-    main()
-
-def normalize_columns(df):
+        def def normalize_columns(df):
     lower_cols = [c.lower() for c in df.columns]
     col_map = {}
     for required in COLUMNS_REQUIRED:
@@ -174,43 +169,8 @@ def DCF_automated(company_row, nacemapping, waccmap, years=5):
         'nace_code': nace_code
     }
 
-def main():
-    st.set_page_config(page_title="Incrolink Company Info", page_icon="🟢", layout="wide")
-    # -- Session state manages splash logic --
-    if "platform_ready" not in st.session_state:
-        st.session_state["platform_ready"] = False
-        logo_screener()
-        # Use JS trick to advance after 2.8s (sleep not recommended with rerun):
-        st.markdown("""
-            <script>
-            setTimeout(() => { window.location.reload(); }, 2800);
-            </script>
-            """, unsafe_allow_html=True)
-        st.stop()
-    else:
-        small_logo()
-        st.title("Incrolink Company Info Extractor + DCF Automated")
-
-        df = load_db()
-        nacemapping_url = "https://www.dropbox.com/scl/fi/65lrk58ydkga18skdlm4s/nacemapping.xlsx?rlkey=ssno24yaja3n1efqw15kjjxnr&st=vuevb60d&dl=1"
-        nacemapping = load_secret_dropbox_xlsx(nacemapping_url)
-        waccmap_url = "https://www.dropbox.com/scl/fi/53ee9isdgron9drs2ddtr/wacc.xlsx?rlkey=9fyxf0otm5l17tsp4pykstspb&st=kut4lc1h&dl=1"
-        waccmap = load_secret_dropbox_xlsx(waccmap_url)
-        if df is not None:
-            show_search(df, nacemapping, waccmap)
-
-    # Mark session as ready after reload
-    if "platform_ready" not in st.session_state or not st.session_state["platform_ready"]:
-        st.session_state["platform_ready"] = True
-
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
 
 
 
