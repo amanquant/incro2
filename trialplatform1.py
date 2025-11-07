@@ -27,7 +27,7 @@ def logo_animation():
         }
         </style>
         <div class='logo-wrap'>
-            <img src='logoincrolink1.png' class='logo-img' width='220' />
+            <img src='logoincrolink1.jpeg' class='logo-img' width='220' />
         </div>
         """, unsafe_allow_html=True)
     time.sleep(2)
@@ -160,6 +160,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
