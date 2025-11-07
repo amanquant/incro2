@@ -7,6 +7,31 @@ COLUMNS_REQUIRED = [
     "changes in wc", "lt debt", "st debt", "sh equity", "capital equity", "cash"
 ]
 
+# 1. Smooth logo transition
+def logo_animation():
+    import streamlit.components.v1 as components
+    st.set_page_config(page_title="Incrolink Platform", page_icon="🟢", layout="wide")
+    # This uses CSS for fade-in animation
+    st.markdown("""
+        <style>
+        .logo-wrap { 
+            display: flex; justify-content: center; margin-top: 50px; 
+        }
+        .logo-img {
+            opacity: 0;
+            animation: fadeIn 2s ease-in forwards;
+        }
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+        </style>
+        <div class='logo-wrap'>
+            <img src='logoincrolink1.png' class='logo-img' width='220' />
+        </div>
+        """, unsafe_allow_html=True)
+    time.sleep(2)
+    st.markdown("---")
+    
 def normalize_columns(df):
     lower_cols = [c.lower() for c in df.columns]
     col_map = {}
@@ -114,6 +139,7 @@ def DCF_automated(company_row, nacemapping, waccmap, years=5):
     }
 
 def main():
+    logo_animation()
     st.set_page_config(page_title="Incrolink Company Info", page_icon="🟢", layout="wide")
     st.title("Incrolink Company Info Extractor + DCF Automated")
 
@@ -133,5 +159,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
