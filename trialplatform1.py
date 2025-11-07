@@ -94,7 +94,7 @@ def DCF_automated(company_row, waccmap, years=5):
     d_and_a = company_row['d&a']
     capex = company_row['capex']
     changes_in_wc = company_row['changes in wc']
-    FCF0 = net_income + d_and_a - capex + changes_in_wc
+    FCF0 = net_income + d_and_a - capex - changes_in_wc
 
     # Project FCFs and calculate Terminal Value
     FCFs = [FCF0 * ((1 + g) ** n) for n in range(1, years + 1)]
@@ -173,6 +173,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
