@@ -8,9 +8,6 @@ COLUMNS_REQUIRED = [
     "changes in wc", "lt debt", "st debt", "sh equity", "capital equity", "cash"
 ]
 
-import streamlit as st
-import time
-
 def logo_screener():
     st.markdown("""
         <style>
@@ -53,23 +50,7 @@ def small_logo():
         </div>
         """, unsafe_allow_html=True)
 
-def main():
-    st.set_page_config(page_title="Incrolink Company Info", page_icon="🟢", layout="wide")
-    if "platform_ready" not in st.session_state:
-        st.session_state["platform_ready"] = False
-        st.session_state["start_time"] = time.time()
-
-    if not st.session_state["platform_ready"]:
-        logo_screener()
-        # Wait for 2.5 seconds, then switch to platform
-        if time.time() - st.session_state["start_time"] > 2.5:
-            st.session_state["platform_ready"] = True
-            st.experimental_rerun()
-        st.stop()
-    else:
-        small_logo()
-        st.title("Incrolink Company Info Extractor + DCF Automated")
-        def normalize_columns(df):
+def normalize_columns(df):
     lower_cols = [c.lower() for c in df.columns]
     col_map = {}
     for required in COLUMNS_REQUIRED:
@@ -169,9 +150,30 @@ def DCF_automated(company_row, nacemapping, waccmap, years=5):
         'nace_code': nace_code
     }
 
+def main():
+    st.set_page_config(page_title="Incrolink Company Info", page_icon="🟢", layout="wide")
+    if "platform_ready" not in st.session_state:
+        st.session_state["platform_ready"] = False
+        st.session_state["start_time"] = time.time()
+
+    if not st.session_state["platform_ready"]:
+        logo_screener()
+        # Wait for 2.5 seconds, then switch to platform
+        if time.time() - st.session_state["start_time"] > 2.5:
+            st.session_state["platform_ready"] = True
+            st.experimental_rerun()
+        st.stop()
+    else:
+        small_logo()
+        st.title("Incrolink Company Info Extractor + DCF Automated")
+
+        df = load_db()
+        nacemapping_url = "https://www.dropbox.com/scl/fi/65lrk58ydkga18skdlm4s/nacemapping.xlsx?rlkey=ssno24yaja3n1efqw15kjjxnr&st=vuevb60d&dl=1"
+        nacemapping = load_secret_dropbox_xlsx(nacemapping_url)
+        waccmap_url = "https://www.dropbox.com/scl/fi/53ee9isdgron9drs2ddtr/wacc.xlsx?rlkey=9fyxf0otm5l17tsp4pykstspb&st=kut4lc1h&dl=1"
+        waccmap = load_secret_dropbox_xlsx(waccmap_url)
+        if df is not None:
+            show_search(df, nacemapping, waccmap)
+
 if __name__ == "__main__":
     main()
-
-
-
-
