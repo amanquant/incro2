@@ -10,28 +10,43 @@ COLUMNS_REQUIRED = [
 
 # 1. Smooth logo transition
 def logo_animation():
-    import streamlit.components.v1 as components
-    st.set_page_config(page_title="Incrolink Platform", page_icon="🟢", layout="wide")
-    # This uses CSS for fade-in animation
-    st.markdown(
+    # Full-white background and smooth logo fade-in
+    st.markdown("""
         <style>
+        .stApp { 
+            background: #fff !important; 
+        }
         .logo-wrap { 
-            display: flex; justify-content: center; margin-top: 50px; 
+            display: flex; justify-content: center; align-items: center; height: 400px;
         }
         .logo-img {
             opacity: 0;
-            animation: fadeIn 2s ease-in forwards;
+            animation: fadeInLogo 2s ease-in forwards;
+            width: 220px;
         }
-        @keyframes fadeIn {
+        .platform-title {
+            opacity: 0;
+            text-align: center;
+            font-size: 28px;
+            font-weight: 700;
+            margin-top: 10px;
+            animation: fadeInTitle 1.2s 2s ease-in forwards;
+        }
+        @keyframes fadeInLogo {
+            to { opacity: 1; }
+        }
+        @keyframes fadeInTitle {
             to { opacity: 1; }
         }
         </style>
         <div class='logo-wrap'>
-            <img src='logoincrolink1.jpeg' class='logo-img' width='220' />
+            <img src='logoincrolink1.jpeg' class='logo-img' />
         </div>
-        , unsafe_allow_html=True)
-    time.sleep(2)
+        <div class='platform-title'>Incrolink Platform</div>
+        """, unsafe_allow_html=True)
+    time.sleep(3)
     st.markdown("---")
+
     
 def normalize_columns(df):
     lower_cols = [c.lower() for c in df.columns]
