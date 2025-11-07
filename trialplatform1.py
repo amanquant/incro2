@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import time
 
 COLUMNS_REQUIRED = [
     "company", "nace", "ebit", "employees", "net income", "capex", "d&a",
@@ -18,24 +17,10 @@ def normalize_columns(df):
                 break
     return df.rename(columns=col_map)
 
-def load_db():
-    file = st.file_uploader("Upload Excel Company DB", type=["xlsx"])
-    if not file:
-        st.warning("Please upload an Excel database with the required columns.")
-        return None
-    df = pd.read_excel(file)
-    df = normalize_columns(df)
-    missing = [c for c in COLUMNS_REQUIRED if c not in df.columns]
-    if missing:
-        st.error(f"Missing columns: {', '.join(missing)}")
-        return None
-    st.success(f"Loaded company database with {len(df)} rows.")
-    if st.checkbox("Preview company data", False):
-        st.dataframe(df.head())
-    return df
-
 def load_secret_dropbox_xlsx(url, sheet_name=None):
-    return pd.read_excel(url, sheet_name=sheet_name)
+    # Automatically switches to dl=1 for direct download
+    fixed_url = url.replace("dl=0", "dl=1")
+    return pd.read_excel(fixed_url, sheet_name=sheet_name)
 
 def show_search(df, waccmap):
     st.write("### Company Information Search")
@@ -102,15 +87,23 @@ def DCF_automated(company_row, waccmap, years=5):
     }
 
 def main():
-    st.logo("logoincrolink1.jpeg",size="large")
+    st.set_page_config(page_title="Incrolink Company Info", page_icon="🟢", layout="wide")
     st.title("Incrolink Company Info Extractor + DCF Automated")
-    df = load_db()
-    waccmap_url = "https://www.dropbox.com/scl/fi/x2u50g51sa8xuvf2ibjpg/wacc.xlsx?rlkey=sau1mzibsh7ndy6uwx76rvj2m&st=5eqwcyfo&dl=0"
+
+    # Dropbox URLs
+    dataset_url = "https://www.dropbox.com/scl/fi/xp7lqxzym0ddwyjx1adeh/datasetincro1.xlsx?rlkey=a1zrwfo2d1mvi9got93wtj3zy&st=2p5sym7a&dl=0"
+    waccmap_url = "https://www.dropbox.com/scl/fi/x2u50g51sa8xuvf2ibjpg/wacc.xlsx?rlkey=sau1mzibsh7ndy6uwx76rvj2m&st=cxg411vs&dl=0"
+
+    # Load data from Dropbox
+    df = load_secret_dropbox_xlsx(dataset_url)
+    df = normalize_columns(df)
+    missing = [c for c in COLUMNS_REQUIRED if c not in df.columns]
+    if missing:
+        st.error(f"Missing columns in company database: {', '.join(missing)}")
+        st.stop()
     waccmap = load_secret_dropbox_xlsx(waccmap_url)
-    if df is not None:
-        show_search(df, waccmap)
+
+    show_search(df, waccmap)
 
 if __name__ == "__main__":
     main()
-
-
