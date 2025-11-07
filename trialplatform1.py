@@ -16,7 +16,7 @@ def show_search(df, waccmap):
     name_query = st.text_input("Search company name (case-insensitive, substring allowed)")
     if not name_query:
         return
-    for i, r in matches.iterrows():
+    for i, r in df.iterrows():
         st.markdown("---")
         for c in COLUMNS_REQUIRED:
             st.write(f"**{c.title()}:** {r[c]}")
