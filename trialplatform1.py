@@ -13,7 +13,7 @@ def logo_animation():
     import streamlit.components.v1 as components
     st.set_page_config(page_title="Incrolink Platform", page_icon="🟢", layout="wide")
     # This uses CSS for fade-in animation
-    st.markdown("""
+    st.markdown(
         <style>
         .logo-wrap { 
             display: flex; justify-content: center; margin-top: 50px; 
@@ -29,7 +29,7 @@ def logo_animation():
         <div class='logo-wrap'>
             <img src='logoincrolink1.jpeg' class='logo-img' width='220' />
         </div>
-        """, unsafe_allow_html=True)
+        , unsafe_allow_html=True)
     time.sleep(2)
     st.markdown("---")
     
@@ -160,6 +160,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
