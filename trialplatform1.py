@@ -161,7 +161,7 @@ def main():
         logo_screener()
         if time.time() - st.session_state["start_time"] > 2.5:
             st.session_state["platform_ready"] = True
-            st.experimental_rerun()
+            st.rerun()
         st.stop()
     else:
         small_logo()
@@ -176,4 +176,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
