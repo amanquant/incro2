@@ -45,7 +45,6 @@ def logo_animation():
         <div class='platform-title'>Incrolink Platform</div>
         """, unsafe_allow_html=True)
     time.sleep(3)
-    st.markdown("---")
 
     
 def normalize_columns(df):
@@ -175,6 +174,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
