@@ -13,7 +13,6 @@ def load_secret_dropbox_xlsx(url, sheet_name=None):
     return pd.read_excel(fixed_url, sheet_name=sheet_name)
 
 def show_search(df, waccmap):
-    st.write("### Company Information Search")
     name_query = st.text_input("Search company name (case-insensitive, substring allowed)")
     if not name_query:
         return
@@ -77,9 +76,6 @@ def DCF_automated(company_row, waccmap, years=5):
     }
 
 def main():
-    st.set_page_config(page_title="Incrolink Company Info", layout="wide")
-    st.title("Incrolink Company Info Extractor + DCF Automated")
-
     # Read Dropbox URLs from Streamlit secrets
     dataset_url = st.secrets["dropbox"]["dataset_url"]
     waccmap_url = st.secrets["dropbox"]["waccmap_url"]
@@ -92,6 +88,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
