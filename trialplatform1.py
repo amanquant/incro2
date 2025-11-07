@@ -86,15 +86,11 @@ def main():
 
     # Load data from Dropbox
     df = load_secret_dropbox_xlsx(dataset_url)
-    df = normalize_columns(df)
-    missing = [c for c in COLUMNS_REQUIRED if c not in df.columns]
-    if missing:
-        st.error(f"Missing columns in company database: {', '.join(missing)}")
-        st.stop()
     waccmap = load_secret_dropbox_xlsx(waccmap_url)
 
     show_search(df, waccmap)
 
 if __name__ == "__main__":
     main()
+
 
