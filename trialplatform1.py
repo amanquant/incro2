@@ -122,7 +122,8 @@ def main():
     st.set_page_config(page_title="Incrolink Agent", layout="wide", initial_sidebar_state="expanded")
     
     # Header with branding
-    st.title("🔗 Incrolink Agent")
+    st.title("Incrolink Agent")
+    st.logo("logoincrolink1.jpeg")
     st.markdown("**Automated DCF Valuation Platform**")
     st.markdown("---")
     
@@ -173,6 +174,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
