@@ -8,48 +8,6 @@ COLUMNS_REQUIRED = [
     "changes in wc", "lt debt", "st debt", "sh equity", "capital equity", "cash"
 ]
 
-def logo_screener():
-    st.markdown("""
-        <style>
-        .stApp { background: #fff !important; }
-        .logo-wrap { display: flex; justify-content: center; align-items: center; height: 400px; }
-        .logo-img {
-            opacity: 0;
-            animation: fadeInLogo 2s ease-in forwards;
-            width: 220px;
-        }
-        .platform-title {
-            opacity: 0;
-            text-align: center;
-            font-size: 28px;
-            font-weight: 700;
-            margin-top: 10px;
-            animation: fadeInTitle 1.2s 2s ease-in forwards;
-        }
-        @keyframes fadeInLogo { to { opacity: 1; } }
-        @keyframes fadeInTitle { to { opacity: 1; } }
-        </style>
-        <div class='logo-wrap'>
-            <img src='logoincrolink1.jpeg' class='logo-img' />
-        </div>
-        <div class='platform-title'>Incrolink Platform</div>
-        """, unsafe_allow_html=True)
-
-def small_logo():
-    st.markdown("""
-        <style>
-        .small-logo {
-            position: fixed;
-            top: 25px;
-            right: 25px;
-            z-index: 100;
-        }
-        </style>
-        <div class='small-logo'>
-            <img src='logoincrolink1.jpeg' width='48'/>
-        </div>
-        """, unsafe_allow_html=True)
-
 def normalize_columns(df):
     lower_cols = [c.lower() for c in df.columns]
     col_map = {}
@@ -151,30 +109,18 @@ def DCF_automated(company_row, nacemapping, waccmap, years=5):
     }
 
 def main():
-    st.set_page_config(page_title="Incrolink Company Info", page_icon="🟢", layout="wide")
-    if "platform_ready" not in st.session_state:
-        st.session_state["platform_ready"] = False
-    if "start_time" not in st.session_state:
-        st.session_state["start_time"] = time.time()
-
-    if not st.session_state["platform_ready"]:
-        logo_screener()
-        if time.time() - st.session_state["start_time"] > 2.5:
-            st.session_state["platform_ready"] = True
-            st.rerun()
-        st.stop()
-    else:
-        small_logo()
-        st.title("Incrolink Company Info Extractor + DCF Automated")
-        df = load_db()
-        nacemapping_url = "https://www.dropbox.com/scl/fi/65lrk58ydkga18skdlm4s/nacemapping.xlsx?rlkey=ssno24yaja3n1efqw15kjjxnr&st=vuevb60d&dl=1"
-        nacemapping = load_secret_dropbox_xlsx(nacemapping_url)
-        waccmap_url = "https://www.dropbox.com/scl/fi/53ee9isdgron9drs2ddtr/wacc.xlsx?rlkey=9fyxf0otm5l17tsp4pykstspb&st=kut4lc1h&dl=1"
-        waccmap = load_secret_dropbox_xlsx(waccmap_url)
-        if df is not None:
-            show_search(df, nacemapping, waccmap)
+    st.logo("logoincrolink1.jpeg")
+    st.title("Incrolink Company Info Extractor + DCF Automated")
+    df = load_db()
+    nacemapping_url = "https://www.dropbox.com/scl/fi/65lrk58ydkga18skdlm4s/nacemapping.xlsx?rlkey=ssno24yaja3n1efqw15kjjxnr&st=vuevb60d&dl=1"
+    nacemapping = load_secret_dropbox_xlsx(nacemapping_url)
+    waccmap_url = "https://www.dropbox.com/scl/fi/53ee9isdgron9drs2ddtr/wacc.xlsx?rlkey=9fyxf0otm5l17tsp4pykstspb&st=kut4lc1h&dl=1"
+    waccmap = load_secret_dropbox_xlsx(waccmap_url)
+    if df is not None:
+        show_search(df, nacemapping, waccmap)
 
 if __name__ == "__main__":
     main()
+
 
 
