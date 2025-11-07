@@ -69,7 +69,7 @@ def main():
     else:
         small_logo()
         st.title("Incrolink Company Info Extractor + DCF Automated")
-        def def normalize_columns(df):
+        def normalize_columns(df):
     lower_cols = [c.lower() for c in df.columns]
     col_map = {}
     for required in COLUMNS_REQUIRED:
@@ -171,6 +171,7 @@ def DCF_automated(company_row, nacemapping, waccmap, years=5):
 
 if __name__ == "__main__":
     main()
+
 
 
 
