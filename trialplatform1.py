@@ -112,7 +112,7 @@ def main():
     st.logo("logoincrolink1.jpeg", size="large")
     st.title("Incrolink Company Info Extractor + DCF Automated")
     df = load_db()
-    nacemapping_url = "https://www.dropbox.com/scl/fi/pnshcx1lkvmf9p7lzzq3l/nacemapping.xlsx?rlkey=f7yuvgyw87oz8h52lpvhgwyry&st=gacvmosn&dl=0"
+    nacemapping_url = "https://www.dropbox.com/scl/fi/pnshcx1lkvmf9p7lzzq3l/nacemapping.xlsx?rlkey=f7yuvgyw87oz8h52lpvhgwyry&st=xef8bypv&dl=0"
     nacemapping = load_secret_dropbox_xlsx(nacemapping_url)
     waccmap_url = "https://www.dropbox.com/scl/fi/tr4w4s9czagpgwiiu3qqu/wacc.xlsx?rlkey=ixv4gmuh9fmq88ccf1eu7qqpc&st=3pagkcw3&dl=0"
     waccmap = load_secret_dropbox_xlsx(waccmap_url)
@@ -121,6 +121,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
