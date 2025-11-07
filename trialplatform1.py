@@ -75,7 +75,7 @@ def DCF_automated(company_row, waccmap, years=5):
     lt_debt = company_row['lt debt']
     st_debt = company_row['st debt']
     cash = company_row['cash']
-    EV_current = sh_equity + capital_equity + lt_debt + st_debt - cash
+    EV_current = sh_equity + lt_debt + st_debt - cash
 
     # Retrieve WACC and growth parameters based on category code
     category_code = str(company_row['category_code'])
@@ -173,6 +173,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
