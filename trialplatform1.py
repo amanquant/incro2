@@ -81,7 +81,7 @@ def main():
     st.title("Incrolink Company Info Extractor + DCF Automated")
 
     # Dropbox URLs
-    dataset_url = "https://www.dropbox.com/scl/fi/xp7lqxzym0ddwyjx1adeh/datasetincro1.xlsx?rlkey=a1zrwfo2d1mvi9got93wtj3zy&st=2p5sym7a&dl=0"
+    dataset_url = "https://www.dropbox.com/scl/fi/xp7lqxzym0ddwyjx1adeh/datasetincro1.xlsx?rlkey=a1zrwfo2d1mvi9got93wtj3zy&st=psdkheuc&dl=0"
     waccmap_url = "https://www.dropbox.com/scl/fi/x2u50g51sa8xuvf2ibjpg/wacc.xlsx?rlkey=sau1mzibsh7ndy6uwx76rvj2m&st=cxg411vs&dl=0"
 
     # Load data from Dropbox
@@ -92,6 +92,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
