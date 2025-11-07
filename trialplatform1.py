@@ -8,17 +8,11 @@ COLUMNS_REQUIRED = [
     "changes in wc", "lt debt", "st debt", "sh equity", "capital equity", "cash"
 ]
 
-# 1. Smooth logo transition
-def logo_animation():
-    # Full-white background and smooth logo fade-in
+def logo_screener():
     st.markdown("""
         <style>
-        .stApp { 
-            background: #fff !important; 
-        }
-        .logo-wrap { 
-            display: flex; justify-content: center; align-items: center; height: 400px;
-        }
+        .stApp { background: #fff !important; }
+        .logo-wrap { display: flex; justify-content: center; align-items: center; height: 400px; }
         .logo-img {
             opacity: 0;
             animation: fadeInLogo 2s ease-in forwards;
@@ -32,21 +26,31 @@ def logo_animation():
             margin-top: 10px;
             animation: fadeInTitle 1.2s 2s ease-in forwards;
         }
-        @keyframes fadeInLogo {
-            to { opacity: 1; }
-        }
-        @keyframes fadeInTitle {
-            to { opacity: 1; }
-        }
+        @keyframes fadeInLogo { to { opacity: 1; } }
+        @keyframes fadeInTitle { to { opacity: 1; } }
         </style>
         <div class='logo-wrap'>
             <img src='logoincrolink1.jpeg' class='logo-img' />
         </div>
         <div class='platform-title'>Incrolink Platform</div>
         """, unsafe_allow_html=True)
-    time.sleep(3)
+    # -- Don't use sleep in normal Streamlit; use session variable for transition below --
 
-    
+def small_logo():
+    st.markdown("""
+        <style>
+        .small-logo {
+            position: fixed;
+            top: 25px;
+            right: 25px;
+            z-index: 100;
+        }
+        </style>
+        <div class='small-logo'>
+            <img src='logoincrolink1.jpeg' width='48'/>
+        </div>
+        """, unsafe_allow_html=True)
+
 def normalize_columns(df):
     lower_cols = [c.lower() for c in df.columns]
     col_map = {}
@@ -74,7 +78,6 @@ def load_db():
     return df
 
 def load_secret_dropbox_xlsx(url, sheet_name=None):
-    # Use pd.read_excel directly from Dropbox url
     return pd.read_excel(url, sheet_name=sheet_name)
 
 def show_search(df, nacemapping, waccmap):
@@ -100,7 +103,6 @@ def show_search(df, nacemapping, waccmap):
             st.write("Parameters Used:", dcf_result['params'])
 
 def DCF_automated(company_row, nacemapping, waccmap, years=5):
-    # 1. Current EV
     sh_equity = company_row['sh equity']
     capital_equity = company_row['capital equity']
     lt_debt = company_row['lt debt']
@@ -108,7 +110,6 @@ def DCF_automated(company_row, nacemapping, waccmap, years=5):
     cash = company_row['cash']
     EV_current = sh_equity + capital_equity + lt_debt + st_debt - cash
 
-    # 2. NACE sector lookup
     nace_code = str(company_row['nace'])
     sector_match = nacemapping[nacemapping['nace_code'].astype(str) == nace_code]
     if not sector_match.empty:
@@ -116,7 +117,6 @@ def DCF_automated(company_row, nacemapping, waccmap, years=5):
     else:
         code_letter = None
 
-    # 3. Financial params lookup (re, rd, wacc, g)
     params_match = waccmap[waccmap['sector_code'] == code_letter]
     if not params_match.empty:
         re = params_match.iloc[0]['re']
@@ -126,14 +126,12 @@ def DCF_automated(company_row, nacemapping, waccmap, years=5):
     else:
         re = rd = wacc = g = np.nan
 
-    # 4. FCF0: net income + d&a - capex + changes in wc
     net_income = company_row['net income']
     d_and_a = company_row['d&a']
     capex = company_row['capex']
     changes_in_wc = company_row['changes in wc']
     FCF0 = net_income + d_and_a - capex + changes_in_wc
 
-    # 5. Project FCF for N years
     FCFs = [FCF0 * ((1 + g) ** n) for n in range(1, years + 1)]
     TV = FCFs[-1] / (wacc - g) if (wacc - g) != 0 else 0
 
@@ -154,26 +152,38 @@ def DCF_automated(company_row, nacemapping, waccmap, years=5):
     }
 
 def main():
-    logo_animation()
     st.set_page_config(page_title="Incrolink Company Info", page_icon="🟢", layout="wide")
-    st.title("Incrolink Company Info Extractor + DCF Automated")
+    # -- Session state manages splash logic --
+    if "platform_ready" not in st.session_state:
+        st.session_state["platform_ready"] = False
+        logo_screener()
+        # Use JS trick to advance after 2.8s (sleep not recommended with rerun):
+        st.markdown("""
+            <script>
+            setTimeout(() => { window.location.reload(); }, 2800);
+            </script>
+            """, unsafe_allow_html=True)
+        st.stop()
+    else:
+        small_logo()
+        st.title("Incrolink Company Info Extractor + DCF Automated")
 
-    # Company DB (xlsx upload)
-    df = load_db()
+        df = load_db()
+        nacemapping_url = "https://www.dropbox.com/scl/fi/65lrk58ydkga18skdlm4s/nacemapping.xlsx?rlkey=ssno24yaja3n1efqw15kjjxnr&st=vuevb60d&dl=1"
+        nacemapping = load_secret_dropbox_xlsx(nacemapping_url)
+        waccmap_url = "https://www.dropbox.com/scl/fi/53ee9isdgron9drs2ddtr/wacc.xlsx?rlkey=9fyxf0otm5l17tsp4pykstspb&st=kut4lc1h&dl=1"
+        waccmap = load_secret_dropbox_xlsx(waccmap_url)
+        if df is not None:
+            show_search(df, nacemapping, waccmap)
 
-    # NACEMAPPING: sector mapping from dropbox
-    nacemapping_url = "https://www.dropbox.com/scl/fi/65lrk58ydkga18skdlm4s/nacemapping.xlsx?rlkey=ssno24yaja3n1efqw15kjjxnr&st=vuevb60d&dl=1"
-    nacemapping = load_secret_dropbox_xlsx(nacemapping_url)
-    
-    # WACC/Industry params from dropbox
-    waccmap_url = "https://www.dropbox.com/scl/fi/53ee9isdgron9drs2ddtr/wacc.xlsx?rlkey=9fyxf0otm5l17tsp4pykstspb&st=kut4lc1h&dl=1"
-    waccmap = load_secret_dropbox_xlsx(waccmap_url)
-
-    if df is not None:
-        show_search(df, nacemapping, waccmap)
+    # Mark session as ready after reload
+    if "platform_ready" not in st.session_state or not st.session_state["platform_ready"]:
+        st.session_state["platform_ready"] = True
 
 if __name__ == "__main__":
     main()
+
+
 
 
 
