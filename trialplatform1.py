@@ -77,7 +77,7 @@ def DCF_automated(company_row, waccmap, years=5):
     }
 
 def main():
-    st.set_page_config(page_title="Incrolink Company Info", page_icon="🟢", layout="wide")
+    st.set_page_config(page_title="Incrolink Company Info", layout="wide")
     st.title("Incrolink Company Info Extractor + DCF Automated")
 
     # Read Dropbox URLs from Streamlit secrets
@@ -92,6 +92,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
