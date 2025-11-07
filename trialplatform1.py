@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import time
 
 COLUMNS_REQUIRED = [
     "company", "nace", "ebit", "employees", "net income", "capex", "d&a",
@@ -159,6 +160,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
