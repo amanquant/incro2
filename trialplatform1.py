@@ -109,7 +109,7 @@ def DCF_automated(company_row, nacemapping, waccmap, years=5):
     }
 
 def main():
-    st.logo("logoincrolink1.jpeg")
+    st.logo("logoincrolink1.jpeg", size="large")
     st.title("Incrolink Company Info Extractor + DCF Automated")
     df = load_db()
     nacemapping_url = "https://www.dropbox.com/scl/fi/65lrk58ydkga18skdlm4s/nacemapping.xlsx?rlkey=ssno24yaja3n1efqw15kjjxnr&st=vuevb60d&dl=1"
@@ -121,6 +121,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
