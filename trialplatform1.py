@@ -154,11 +154,11 @@ def main():
     st.set_page_config(page_title="Incrolink Company Info", page_icon="🟢", layout="wide")
     if "platform_ready" not in st.session_state:
         st.session_state["platform_ready"] = False
+    if "start_time" not in st.session_state:
         st.session_state["start_time"] = time.time()
 
     if not st.session_state["platform_ready"]:
         logo_screener()
-        # Wait for 2.5 seconds, then switch to platform
         if time.time() - st.session_state["start_time"] > 2.5:
             st.session_state["platform_ready"] = True
             st.experimental_rerun()
@@ -166,7 +166,6 @@ def main():
     else:
         small_logo()
         st.title("Incrolink Company Info Extractor + DCF Automated")
-
         df = load_db()
         nacemapping_url = "https://www.dropbox.com/scl/fi/65lrk58ydkga18skdlm4s/nacemapping.xlsx?rlkey=ssno24yaja3n1efqw15kjjxnr&st=vuevb60d&dl=1"
         nacemapping = load_secret_dropbox_xlsx(nacemapping_url)
@@ -177,3 +176,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
