@@ -7,16 +7,6 @@ COLUMNS_REQUIRED = [
     "changes in wc", "lt debt", "st debt", "sh equity", "capital equity", "cash", "category_code"
 ]
 
-def normalize_columns(df):
-    lower_cols = [c.lower() for c in df.columns]
-    col_map = {}
-    for required in COLUMNS_REQUIRED:
-        for i, col in enumerate(lower_cols):
-            if required in col.replace("_", " "):
-                col_map[df.columns[i]] = required
-                break
-    return df.rename(columns=col_map)
-
 def load_secret_dropbox_xlsx(url, sheet_name=None):
     # Automatically switches to dl=1 for direct download
     fixed_url = url.replace("dl=0", "dl=1")
@@ -107,3 +97,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
