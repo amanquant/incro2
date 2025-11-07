@@ -80,11 +80,11 @@ def main():
     st.set_page_config(page_title="Incrolink Company Info", page_icon="🟢", layout="wide")
     st.title("Incrolink Company Info Extractor + DCF Automated")
 
-    # Dropbox URLs
-    dataset_url = "https://www.dropbox.com/scl/fi/xp7lqxzym0ddwyjx1adeh/datasetincro1.xlsx?rlkey=a1zrwfo2d1mvi9got93wtj3zy&st=psdkheuc&dl=0"
-    waccmap_url = "https://www.dropbox.com/scl/fi/x2u50g51sa8xuvf2ibjpg/wacc.xlsx?rlkey=sau1mzibsh7ndy6uwx76rvj2m&st=cxg411vs&dl=0"
+    # Read Dropbox URLs from Streamlit secrets
+    dataset_url = st.secrets["dropbox"]["dataset_url"]
+    waccmap_url = st.secrets["dropbox"]["waccmap_url"]
 
-    # Load data from Dropbox
+    # Load data from Dropbox URLs
     df = load_secret_dropbox_xlsx(dataset_url)
     waccmap = load_secret_dropbox_xlsx(waccmap_url)
 
