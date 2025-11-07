@@ -8,6 +8,9 @@ COLUMNS_REQUIRED = [
     "changes in wc", "lt debt", "st debt", "sh equity", "capital equity", "cash"
 ]
 
+import streamlit as st
+import time
+
 def logo_screener():
     st.markdown("""
         <style>
@@ -34,7 +37,6 @@ def logo_screener():
         </div>
         <div class='platform-title'>Incrolink Platform</div>
         """, unsafe_allow_html=True)
-    # -- Don't use sleep in normal Streamlit; use session variable for transition below --
 
 def small_logo():
     st.markdown("""
@@ -50,6 +52,27 @@ def small_logo():
             <img src='logoincrolink1.jpeg' width='48'/>
         </div>
         """, unsafe_allow_html=True)
+
+def main():
+    st.set_page_config(page_title="Incrolink Company Info", page_icon="🟢", layout="wide")
+    if "platform_ready" not in st.session_state:
+        st.session_state["platform_ready"] = False
+        st.session_state["start_time"] = time.time()
+
+    if not st.session_state["platform_ready"]:
+        logo_screener()
+        # Wait for 2.5 seconds, then switch to platform
+        if time.time() - st.session_state["start_time"] > 2.5:
+            st.session_state["platform_ready"] = True
+            st.experimental_rerun()
+        st.stop()
+    else:
+        small_logo()
+        st.title("Incrolink Company Info Extractor + DCF Automated")
+        # ... rest of your platform code here!
+
+if __name__ == "__main__":
+    main()
 
 def normalize_columns(df):
     lower_cols = [c.lower() for c in df.columns]
