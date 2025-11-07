@@ -77,8 +77,8 @@ def DCF_automated(company_row, waccmap, years=5):
 
 def main():
     # Read Dropbox URLs from Streamlit secrets
-    dataset_url = st.secrets["dropbox"]["dataset_url"]
-    waccmap_url = st.secrets["dropbox"]["waccmap_url"]
+    dataset_url = st.secrets["dataset_url"]
+    waccmap_url = st.secrets["waccmap_url"]
 
     # Load data from Dropbox URLs
     df = load_secret_dropbox_xlsx(dataset_url)
@@ -88,6 +88,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
