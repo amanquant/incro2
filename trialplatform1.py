@@ -102,14 +102,15 @@ def DCF_automated(company_row, waccmap, years=5):
     }
 
 def main():
-        st.logo("logoincrolink1.jpeg",size="large")
-        st.title("Incrolink Company Info Extractor + DCF Automated")
-        df = load_db()
-        waccmap_url = "https://www.dropbox.com/scl/fi/x2u50g51sa8xuvf2ibjpg/wacc.xlsx?rlkey=sau1mzibsh7ndy6uwx76rvj2m&st=5eqwcyfo&dl=0"
-        waccmap = load_secret_dropbox_xlsx(waccmap_url)
-        if df is not None:
-            show_search(df, waccmap)
+    st.logo("logoincrolink1.jpeg",size="large")
+    st.title("Incrolink Company Info Extractor + DCF Automated")
+    df = load_db()
+    waccmap_url = "https://www.dropbox.com/scl/fi/x2u50g51sa8xuvf2ibjpg/wacc.xlsx?rlkey=sau1mzibsh7ndy6uwx76rvj2m&st=5eqwcyfo&dl=0"
+    waccmap = load_secret_dropbox_xlsx(waccmap_url)
+    if df is not None:
+        show_search(df, waccmap)
 
 if __name__ == "__main__":
     main()
+
 
