@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
+from datetime import datetime
 
 COLUMNS_REQUIRED = [
     "company", "nace", "ebit", "employees", "net income", "capex", "d&a",
@@ -11,9 +12,14 @@ COLUMNS_REQUIRED = [
 
 COLUMNS_PORTFOLIO = ["company", "sector", "revenue", "employees"]
 
-ANALYSIS_COLUMNS_REQUIRED = [
-    "company", "nace", "lt debt", "sh equity", "ebitda", "operating revenue", "cost of employees", "category_code"
-]
+# Financial statement line items to extract
+FINANCIAL_ITEMS = {
+    'long_term_debt': 'Long term debt',
+    'shareholders_funds': 'Shareholders funds',
+    'operating_revenue': 'Operating revenue (Turnover)',
+    'cost_of_employees': 'Costs of employees',
+    'ebitda': 'EBITDA'
+}
 
 def validate_columns(df, file_type="Dataset", required_cols=None):
     """Validate that the dataframe has all required columns"""
@@ -26,6 +32,120 @@ def validate_columns(df, file_type="Dataset", required_cols=None):
         return False
     st.success(f"✅ {file_type} - All required columns present")
     return True
+
+def extract_date_columns(df):
+    """Extract date columns from dataframe (date format like 31/12/2024)"""
+    date_cols = []
+    
+    for col in df.columns:
+        if col.lower() == 'value':
+            continue
+        try:
+            # Try to parse as date
+            parsed_date = pd.to_datetime(col, format='%d/%m/%Y', errors='coerce')
+            if pd.notna(parsed_date):
+                date_cols.append((col, parsed_date))
+        except:
+            pass
+    
+    # Sort by date in descending order (latest first)
+    date_cols.sort(key=lambda x: x[1], reverse=True)
+    return [col[0] for col in date_cols]  # Return just column names
+
+def find_financial_item(df, item_name):
+    """Find a financial statement item by name (fuzzy matching)"""
+    value_col = df.columns[0]  # First column is "Value"
+    
+    if value_col not in df.columns:
+        return None
+    
+    # Get all items in the Value column
+    items = df[value_col].astype(str).tolist()
+    
+    # Use fuzzy matching to find the item
+    matches = process.extract(item_name, items, scorer=fuzz.token_set_ratio, limit=1)
+    
+    if matches and matches[0][1] >= 60:
+        matching_item = matches[0][0]
+        # Find the row index
+        row_idx = df[df[value_col] == matching_item].index
+        if len(row_idx) > 0:
+            return row_idx[0]
+    
+    return None
+
+def extract_financial_statement_data(df, date_cols):
+    """
+    Extract financial data from financial statement format
+    Returns dict with extracted values for latest year
+    """
+    data = {}
+    
+    if not date_cols:
+        return data, "No date columns found"
+    
+    latest_date = date_cols[0]  # Latest date (first in sorted list)
+    
+    try:
+        # Extract each financial item
+        value_col = df.columns[0]
+        
+        items_found = {}
+        for key, item_name in FINANCIAL_ITEMS.items():
+            row_idx = find_financial_item(df, item_name)
+            if row_idx is not None:
+                try:
+                    value = df.loc[row_idx, latest_date]
+                    if pd.notna(value):
+                        items_found[key] = float(value)
+                    else:
+                        items_found[key] = np.nan
+                except:
+                    items_found[key] = np.nan
+            else:
+                items_found[key] = np.nan
+        
+        return items_found, latest_date
+    
+    except Exception as e:
+        return data, f"Error extracting data: {str(e)}"
+
+def calculate_ratios_from_financial_statement(items_found):
+    """Calculate LTDE, EDAMARGIN, FX ratios from extracted financial statement data"""
+    metrics = {}
+    
+    try:
+        # LTDE: Long term debt / Shareholders funds
+        lt_debt = items_found.get('long_term_debt', np.nan)
+        sh_funds = items_found.get('shareholders_funds', np.nan)
+        
+        if not pd.isna(sh_funds) and sh_funds != 0 and not pd.isna(lt_debt):
+            metrics['ltde'] = lt_debt / sh_funds
+        else:
+            metrics['ltde'] = np.nan
+        
+        # EDAMARGIN: EBITDA / Operating revenue
+        ebitda = items_found.get('ebitda', np.nan)
+        op_revenue = items_found.get('operating_revenue', np.nan)
+        
+        if not pd.isna(op_revenue) and op_revenue != 0 and not pd.isna(ebitda):
+            metrics['edamargin'] = ebitda / op_revenue
+        else:
+            metrics['edamargin'] = np.nan
+        
+        # FX: Cost of employees / Operating revenue
+        cost_emp = items_found.get('cost_of_employees', np.nan)
+        
+        if not pd.isna(op_revenue) and op_revenue != 0 and not pd.isna(cost_emp):
+            metrics['fx'] = cost_emp / op_revenue
+        else:
+            metrics['fx'] = np.nan
+        
+        return metrics
+    
+    except Exception as e:
+        st.error(f"Error calculating ratios: {str(e)}")
+        return metrics
 
 def nace_to_category(nace_code, nace_mapping=None):
     """Convert NACE code to category code using mapping"""
@@ -43,45 +163,6 @@ def fuzzy_match_companies(portfolio_company, db_companies, threshold=80):
         limit=5
     )
     return [match for match in matches if match[1] >= threshold]
-
-def calculate_company_metrics(row, analysis_df=None):
-    """Calculate LTDE, EDAMARGIN, and FX metrics for company"""
-    metrics = {}
-    
-    try:
-        # LTDE: Long term debt / Shareholders funds
-        sh_equity = row.get('sh equity', 0)
-        if sh_equity != 0:
-            ltde = row.get('lt debt', 0) / sh_equity
-        else:
-            ltde = np.nan
-        metrics['ltde'] = ltde
-    except:
-        metrics['ltde'] = np.nan
-    
-    try:
-        # EDAMARGIN: EBITDA / Operating revenue (Turnover)
-        operating_revenue = row.get('operating revenue', 0)
-        if operating_revenue != 0:
-            edamargin = row.get('ebitda', 0) / operating_revenue
-        else:
-            edamargin = np.nan
-        metrics['edamargin'] = edamargin
-    except:
-        metrics['edamargin'] = np.nan
-    
-    try:
-        # FX: Cost of employees / Operating revenue (Turnover)
-        operating_revenue = row.get('operating revenue', 0)
-        if operating_revenue != 0:
-            fx = row.get('cost of employees', 0) / operating_revenue
-        else:
-            fx = np.nan
-        metrics['fx'] = fx
-    except:
-        metrics['fx'] = np.nan
-    
-    return metrics
 
 def get_sector_percentiles(category_code, waccmap):
     """Retrieve sector percentile ranges for LTDE, EDAMARGIN, FX"""
@@ -158,69 +239,99 @@ def display_metric_analysis(company_metrics, sector_percentiles, metric_name, me
         else:
             st.metric("Quartile Position", "N/A")
 
-def frame1_analysis(df_analysis, waccmap, company_row):
+def frame1_analysis(waccmap, company_name, company_metrics, extraction_note, items_found):
     """Frame 1: Analysis with metrics calculation and sector comparison"""
     st.subheader("📊 Frame 1: Financial Metrics Analysis")
     
-    # Calculate company metrics
-    company_metrics = calculate_company_metrics(company_row)
-    
-    # Get sector percentiles from WACC map
-    category_code = company_row.get('category_code', None)
-    sector_percentiles = get_sector_percentiles(category_code, waccmap)
-    
-    st.write(f"**Analysis for:** {company_row.get('company', 'Unknown Company')}")
-    st.write(f"**Category Code:** {category_code}")
+    st.write(f"**Analysis for:** {company_name}")
+    st.write(f"**Data Source:** {extraction_note}")
     st.markdown("---")
     
+    # Display extracted financial statement items
+    st.subheader("📋 Extracted Financial Data")
+    
+    items_col1, items_col2 = st.columns(2)
+    with items_col1:
+        st.write("**Long-term Debt:**")
+        if not np.isnan(items_found.get('long_term_debt', np.nan)):
+            st.write(f"€ {items_found['long_term_debt']:,.2f}")
+        else:
+            st.write("N/A")
+        
+        st.write("**Shareholders Funds:**")
+        if not np.isnan(items_found.get('shareholders_funds', np.nan)):
+            st.write(f"€ {items_found['shareholders_funds']:,.2f}")
+        else:
+            st.write("N/A")
+    
+    with items_col2:
+        st.write("**Operating Revenue:**")
+        if not np.isnan(items_found.get('operating_revenue', np.nan)):
+            st.write(f"€ {items_found['operating_revenue']:,.2f}")
+        else:
+            st.write("N/A")
+        
+        st.write("**EBITDA:**")
+        if not np.isnan(items_found.get('ebitda', np.nan)):
+            st.write(f"€ {items_found['ebitda']:,.2f}")
+        else:
+            st.write("N/A")
+        
+        st.write("**Cost of Employees:**")
+        if not np.isnan(items_found.get('cost_of_employees', np.nan)):
+            st.write(f"€ {items_found['cost_of_employees']:,.2f}")
+        else:
+            st.write("N/A")
+    
+    st.markdown("---")
+    st.subheader("📈 Financial Ratios vs. Sector Benchmarks")
+    
+    # Get category code from waccmap for percentile lookup
+    # For now, we'll display general metrics without category-specific benchmarks
+    # User will need to provide category_code
+    
     # Display all three metrics with sector comparison
-    st.write("**Metric 1: LTDE (Long-term Debt / Shareholders' Equity)**")
-    display_metric_analysis(company_metrics, sector_percentiles, 'ltde', 'LTDE')
-    st.write("Measures financial leverage - higher values indicate more debt relative to equity.")
+    st.write("**Metric 1: LTDE (Long-term Debt / Shareholders' Funds)**")
+    st.write("*Measures financial leverage - higher values indicate more debt relative to equity*")
+    col1, col2 = st.columns(2)
+    with col1:
+        if not np.isnan(company_metrics.get('ltde', np.nan)):
+            st.metric("Company LTDE", f"{company_metrics['ltde']:.4f}")
+        else:
+            st.metric("Company LTDE", "N/A")
     
     st.markdown("---")
     
     st.write("**Metric 2: EDAMARGIN (EBITDA / Operating Revenue)**")
-    display_metric_analysis(company_metrics, sector_percentiles, 'edamargin', 'EDAMARGIN')
-    st.write("Measures operational profitability - higher values indicate better operational efficiency.")
+    st.write("*Measures operational profitability - higher values indicate better operational efficiency*")
+    col1, col2 = st.columns(2)
+    with col1:
+        if not np.isnan(company_metrics.get('edamargin', np.nan)):
+            st.metric("Company EDAMARGIN", f"{company_metrics['edamargin']:.4f}")
+        else:
+            st.metric("Company EDAMARGIN", "N/A")
     
     st.markdown("---")
     
     st.write("**Metric 3: FX (Cost of Employees / Operating Revenue)**")
-    display_metric_analysis(company_metrics, sector_percentiles, 'fx', 'FX')
-    st.write("Measures labor cost intensity - higher values indicate higher employee costs relative to revenue.")
+    st.write("*Measures labor cost intensity - higher values indicate higher employee costs relative to revenue*")
+    col1, col2 = st.columns(2)
+    with col1:
+        if not np.isnan(company_metrics.get('fx', np.nan)):
+            st.metric("Company FX", f"{company_metrics['fx']:.4f}")
+        else:
+            st.metric("Company FX", "N/A")
     
     st.markdown("---")
     
     # Summary table
-    st.subheader("📋 Metrics Summary")
+    st.subheader("📊 Metrics Summary")
     summary_data = {
         'Metric': ['LTDE', 'EDAMARGIN', 'FX'],
         'Company Value': [
             f"{company_metrics.get('ltde', np.nan):.4f}" if not np.isnan(company_metrics.get('ltde', np.nan)) else 'N/A',
             f"{company_metrics.get('edamargin', np.nan):.4f}" if not np.isnan(company_metrics.get('edamargin', np.nan)) else 'N/A',
             f"{company_metrics.get('fx', np.nan):.4f}" if not np.isnan(company_metrics.get('fx', np.nan)) else 'N/A'
-        ],
-        'Sector P10': [
-            f"{sector_percentiles.get('ltde', {}).get('p10', np.nan):.4f}" if not np.isnan(sector_percentiles.get('ltde', {}).get('p10', np.nan)) else 'N/A',
-            f"{sector_percentiles.get('edamargin', {}).get('p10', np.nan):.4f}" if not np.isnan(sector_percentiles.get('edamargin', {}).get('p10', np.nan)) else 'N/A',
-            f"{sector_percentiles.get('fx', {}).get('p10', np.nan):.4f}" if not np.isnan(sector_percentiles.get('fx', {}).get('p10', np.nan)) else 'N/A'
-        ],
-        'Sector P90': [
-            f"{sector_percentiles.get('ltde', {}).get('p90', np.nan):.4f}" if not np.isnan(sector_percentiles.get('ltde', {}).get('p90', np.nan)) else 'N/A',
-            f"{sector_percentiles.get('edamargin', {}).get('p90', np.nan):.4f}" if not np.isnan(sector_percentiles.get('edamargin', {}).get('p90', np.nan)) else 'N/A',
-            f"{sector_percentiles.get('fx', {}).get('p90', np.nan):.4f}" if not np.isnan(sector_percentiles.get('fx', {}).get('p90', np.nan)) else 'N/A'
-        ],
-        'Position': [
-            get_percentile_position(company_metrics.get('ltde', np.nan), 
-                                   sector_percentiles.get('ltde', {}).get('p10', np.nan),
-                                   sector_percentiles.get('ltde', {}).get('p90', np.nan))[1] or 'N/A',
-            get_percentile_position(company_metrics.get('edamargin', np.nan),
-                                   sector_percentiles.get('edamargin', {}).get('p10', np.nan),
-                                   sector_percentiles.get('edamargin', {}).get('p90', np.nan))[1] or 'N/A',
-            get_percentile_position(company_metrics.get('fx', np.nan),
-                                   sector_percentiles.get('fx', {}).get('p10', np.nan),
-                                   sector_percentiles.get('fx', {}).get('p90', np.nan))[1] or 'N/A'
         ]
     }
     
@@ -412,40 +523,64 @@ def show_search(df, waccmap):
         
         # Upload analysis file for detailed metrics
         analysis_file = st.file_uploader(
-            f"Upload Analysis Data (XLSX) for {r['company']} - For metrics calculation",
+            f"Upload Financial Statement (XLSX) for {r['company']}",
             type="xlsx",
             key=f"analysis_upload_{i}",
-            help="Upload file with columns: company, nace, lt debt, sh equity, ebitda, operating revenue, cost of employees, category_code"
+            help="Upload financial statement with Value column and date columns (format: 31/12/2024)"
         )
         
         if analysis_file:
             try:
+                # Read the entire file first to inspect structure
                 df_analysis = pd.read_excel(analysis_file)
                 
-                # Find matching company in analysis file
-                matching_analysis = df_analysis[df_analysis['company'].str.contains(r['company'], case=False, na=False)]
+                st.info("📂 File structure detected:")
+                st.write(f"**Rows:** {len(df_analysis)}")
+                st.write(f"**Columns:** {list(df_analysis.columns)}")
                 
-                if not matching_analysis.empty:
-                    company_analysis_row = matching_analysis.iloc[0]
+                # Extract date columns
+                date_cols = extract_date_columns(df_analysis)
+                
+                if date_cols:
+                    st.write(f"**Date columns found:** {date_cols}")
+                    st.write(f"**Latest year:** {date_cols[0]}")
                     
-                    # Create tabs for three frames
-                    tab1, tab2, tab3 = st.tabs(["Frame 1: Metrics Analysis", "Frame 2: Additional Analysis", "Frame 3: Risk Assessment"])
+                    # Extract financial statement data
+                    items_found, extraction_note = extract_financial_statement_data(df_analysis, date_cols)
                     
-                    with tab1:
-                        frame1_analysis(df_analysis, waccmap, company_analysis_row)
-                    
-                    with tab2:
-                        frame2_placeholder()
-                    
-                    with tab3:
-                        frame3_placeholder()
+                    if items_found:
+                        # Calculate ratios
+                        company_metrics = calculate_ratios_from_financial_statement(items_found)
+                        
+                        if company_metrics:
+                            # Create tabs for three frames
+                            tab1, tab2, tab3 = st.tabs(["Frame 1: Metrics Analysis", "Frame 2: Additional Analysis", "Frame 3: Risk Assessment"])
+                            
+                            with tab1:
+                                frame1_analysis(waccmap, r['company'], company_metrics, extraction_note, items_found)
+                            
+                            with tab2:
+                                frame2_placeholder()
+                            
+                            with tab3:
+                                frame3_placeholder()
+                        else:
+                            st.error("Could not calculate ratios from extracted data")
+                    else:
+                        st.warning("Could not extract financial statement items. Please check file format and item names.")
+                        st.write("**Looking for items:**")
+                        for key, item_name in FINANCIAL_ITEMS.items():
+                            st.write(f"• {item_name}")
                 else:
-                    st.warning(f"No matching company found in analysis file for '{r['company']}'")
+                    st.error("No date columns found. Expected format: 31/12/2024, 31/12/2023, etc.")
+                    st.write(f"Available columns: {list(df_analysis.columns)}")
             
             except Exception as e:
                 st.error(f"Error loading analysis file: {str(e)}")
+                import traceback
+                st.write(traceback.format_exc())
         else:
-            st.info("💡 Upload an analysis file to see detailed metrics comparison with sector benchmarks")
+            st.info("💡 Upload a financial statement file to analyze company metrics")
 
 def DCF_automated(company_row, waccmap, years=5):
     """Calculate DCF valuation for a company"""
@@ -612,6 +747,13 @@ def main():
             st.write("**Portfolio file (optional) must include:**")
             for col in COLUMNS_PORTFOLIO:
                 st.text(f"• {col}")
+            
+            st.write("**Financial Statement file format:**")
+            st.write("Column Headers: Value | 31/12/2024 | 31/12/2023 | 31/12/2022 | ...")
+            st.write("")
+            st.write("**Required row items:**")
+            for key, item_name in FINANCIAL_ITEMS.items():
+                st.text(f"• {item_name}")
 
 if __name__ == "__main__":
     main()
