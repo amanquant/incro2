@@ -34,6 +34,7 @@ def validate_columns(df, file_type="Dataset", required_cols=None):
     return True
 
 def extract_date_columns(df):
+    date_cols = []
     try:
         parsed_date = pd.to_datetime(col, format='%d/%m/%Y', errors='coerce')
         if pd.notna(parsed_date):
@@ -817,6 +818,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
