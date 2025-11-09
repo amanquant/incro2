@@ -34,21 +34,13 @@ def validate_columns(df, file_type="Dataset", required_cols=None):
     return True
 
 def extract_date_columns(df):
-    """Extract date columns from dataframe (date format like 31/12/2024)"""
-    date_cols = []
-
-    for col in df.columns:
-        if col == 'value':
-            continue
-        try:
-            # Ensure the column name is a string before parsing
-            col_str = str(col)
-            parsed_date = pd.to_datetime(col_str, format='%d/%m/%Y', errors='coerce')
-            if pd.notna(parsed_date):
-                date_cols.append((col, parsed_date))
-        except Exception as e:
-            pass  # optionally: print(f"Skipping {col}: {e}")
-
+    try:
+        parsed_date = pd.to_datetime(col, format='%d/%m/%Y', errors='coerce')
+        if pd.notna(parsed_date):
+            date_cols.append((col, parsed_date))
+    except:
+        pass
+        
     return date_cols
     
     # Sort by date in descending order (latest first)
@@ -825,6 +817,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
