@@ -38,6 +38,8 @@ def extract_date_columns(df):
     date_cols = []
     
     for col in df.columns:
+        if col.lower() == 'value':
+            continue
         try:
             # Try to parse as date
             parsed_date = pd.to_datetime(col, format='%d/%m/%Y', errors='coerce')
@@ -145,6 +147,114 @@ def calculate_ratios_from_financial_statement(items_found):
         st.error(f"Error calculating ratios: {str(e)}")
         return metrics
 
+def get_company_category_code(company_name, dataset_df):
+    """Lookup company's category_code from dataset"""
+    matching_companies = dataset_df[dataset_df['company'].str.contains(company_name, case=False, na=False)]
+    
+    if not matching_companies.empty:
+        category_code = matching_companies.iloc[0]['category_code']
+        return category_code
+    
+    return None
+
+def get_sector_percentiles(category_code, waccmap):
+    """Retrieve sector percentile ranges for LTDE, EDAMARGIN, FX (10th, 25th, 50th, 75th, 90th)"""
+    percentiles = {}
+    
+    category_data = waccmap[waccmap['category_code'].astype(str) == str(category_code)]
+    
+    if not category_data.empty:
+        row = category_data.iloc[0]
+        
+        # Extract percentile ranges for LTDE
+        percentiles['ltde'] = {
+            'p10': row.get('ltde10th', np.nan),
+            'p25': row.get('ltde25th', np.nan),
+            'p50': row.get('ltde50th', np.nan),
+            'p75': row.get('ltde75th', np.nan),
+            'p90': row.get('ltde90th', np.nan)
+        }
+        
+        # Extract percentile ranges for EDAMARGIN
+        percentiles['edamargin'] = {
+            'p10': row.get('edamarg10th', np.nan),
+            'p25': row.get('edamarg25th', np.nan),
+            'p50': row.get('edamarg50th', np.nan),
+            'p75': row.get('edamarg75th', np.nan),
+            'p90': row.get('edamarg90th', np.nan)
+        }
+        
+        # Extract percentile ranges for FX
+        percentiles['fx'] = {
+            'p10': row.get('fx10th', np.nan),
+            'p25': row.get('fx25th', np.nan),
+            'p50': row.get('fx50th', np.nan),
+            'p75': row.get('fx75th', np.nan),
+            'p90': row.get('fx90th', np.nan)
+        }
+    
+    return percentiles
+
+def get_percentile_position(value, percentiles_dict):
+    """Calculate company's percentile position within sector range"""
+    if np.isnan(value):
+        return None, None, "N/A"
+    
+    # Get the percentile values in order
+    p10 = percentiles_dict.get('p10', np.nan)
+    p25 = percentiles_dict.get('p25', np.nan)
+    p50 = percentiles_dict.get('p50', np.nan)
+    p75 = percentiles_dict.get('p75', np.nan)
+    p90 = percentiles_dict.get('p90', np.nan)
+    
+    # Determine which quartile/quintile
+    if value < p10:
+        position = "Below P10"
+        rank = "Exceptional (Bottom)"
+    elif value < p25:
+        position = "P10-P25"
+        rank = "Q1 (Very Low)"
+    elif value < p50:
+        position = "P25-P50"
+        rank = "Q2 (Below Median)"
+    elif value < p75:
+        position = "P50-P75"
+        rank = "Q3 (Above Median)"
+    elif value < p90:
+        position = "P75-P90"
+        rank = "Q4 (High)"
+    else:
+        position = "Above P90"
+        rank = "Exceptional (Top)"
+    
+    return position, rank, f"{p10:.4f} | {p25:.4f} | {p50:.4f} | {p75:.4f} | {p90:.4f}"
+
+def display_metric_comparison(company_metrics, sector_percentiles, metric_name, metric_label):
+    """Display metric with sector percentile comparison"""
+    company_value = company_metrics.get(metric_name, np.nan)
+    percentiles = sector_percentiles.get(metric_name, {})
+    
+    st.write(f"**{metric_label}**")
+    
+    if not np.isnan(company_value):
+        position, rank, percentile_range = get_percentile_position(company_value, percentiles)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Company Value", f"{company_value:.4f}")
+        with col2:
+            st.metric("Sector Position", rank)
+        with col3:
+            st.metric("Percentile Range", position)
+        
+        # Display percentile comparison bar
+        st.write("**Sector Distribution (P10 | P25 | P50 | P75 | P90):**")
+        st.write(percentile_range)
+    else:
+        st.metric(metric_label, "N/A")
+    
+    st.markdown("---")
+
 def nace_to_category(nace_code, nace_mapping=None):
     """Convert NACE code to category code using mapping"""
     if nace_mapping is None or nace_code not in nace_mapping.values:
@@ -161,192 +271,6 @@ def fuzzy_match_companies(portfolio_company, db_companies, threshold=80):
         limit=5
     )
     return [match for match in matches if match[1] >= threshold]
-
-def get_sector_percentiles(category_code, waccmap):
-    """Retrieve sector percentile ranges for LTDE, EDAMARGIN, FX"""
-    percentiles = {}
-    
-    category_data = waccmap[waccmap['category_code'].astype(str) == str(category_code)]
-    
-    if not category_data.empty:
-        row = category_data.iloc[0]
-        
-        # Extract percentile ranges
-        percentiles['ltde'] = {
-            'p10': row.get('ltde10th', np.nan),
-            'p90': row.get('ltde90th', np.nan)
-        }
-        percentiles['edamargin'] = {
-            'p10': row.get('edamarg10th', np.nan),
-            'p90': row.get('edamarg90th', np.nan)
-        }
-        percentiles['fx'] = {
-            'p10': row.get('fx10th', np.nan),
-            'p90': row.get('fx90th', np.nan)
-        }
-    
-    return percentiles
-
-def get_percentile_position(value, p10, p90):
-    """Calculate company's percentile position within sector range"""
-    if np.isnan(value) or np.isnan(p10) or np.isnan(p90):
-        return None, None
-    
-    if p90 == p10:
-        return 50, "Center"
-    
-    position = ((value - p10) / (p90 - p10)) * 100
-    position = max(0, min(100, position))  # Clamp between 0-100
-    
-    if position < 25:
-        quartile = "Q1 (Low)"
-    elif position < 50:
-        quartile = "Q2 (Below Median)"
-    elif position < 75:
-        quartile = "Q3 (Above Median)"
-    else:
-        quartile = "Q4 (High)"
-    
-    return position, quartile
-
-def display_metric_analysis(company_metrics, sector_percentiles, metric_name, metric_label):
-    """Display analysis for single metric with percentile comparison"""
-    company_value = company_metrics.get(metric_name, np.nan)
-    sector_range = sector_percentiles.get(metric_name, {})
-    p10 = sector_range.get('p10', np.nan)
-    p90 = sector_range.get('p90', np.nan)
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if not np.isnan(company_value):
-            st.metric(f"Company {metric_label}", f"{company_value:.4f}")
-        else:
-            st.metric(f"Company {metric_label}", "N/A")
-    
-    with col2:
-        if not np.isnan(p10) and not np.isnan(p90):
-            st.metric("Sector P10-P90", f"{p10:.4f} - {p90:.4f}")
-        else:
-            st.metric("Sector P10-P90", "N/A")
-    
-    with col3:
-        percentile_pos, quartile = get_percentile_position(company_value, p10, p90)
-        if percentile_pos is not None:
-            st.metric("Quartile Position", f"{percentile_pos:.1f}%\n{quartile}")
-        else:
-            st.metric("Quartile Position", "N/A")
-
-def frame1_analysis(waccmap, company_name, company_metrics, extraction_note, items_found):
-    """Frame 1: Analysis with metrics calculation and sector comparison"""
-    st.subheader("📊 Frame 1: Financial Metrics Analysis")
-    
-    st.write(f"**Analysis for:** {company_name}")
-    st.write(f"**Data Source:** {extraction_note}")
-    st.markdown("---")
-    
-    # Display extracted financial statement items
-    st.subheader("📋 Extracted Financial Data")
-    
-    items_col1, items_col2 = st.columns(2)
-    with items_col1:
-        st.write("**Long-term Debt:**")
-        if not np.isnan(items_found.get('long_term_debt', np.nan)):
-            st.write(f"€ {items_found['long_term_debt']:,.2f}")
-        else:
-            st.write("N/A")
-        
-        st.write("**Shareholders Funds:**")
-        if not np.isnan(items_found.get('shareholders_funds', np.nan)):
-            st.write(f"€ {items_found['shareholders_funds']:,.2f}")
-        else:
-            st.write("N/A")
-    
-    with items_col2:
-        st.write("**Operating Revenue:**")
-        if not np.isnan(items_found.get('operating_revenue', np.nan)):
-            st.write(f"€ {items_found['operating_revenue']:,.2f}")
-        else:
-            st.write("N/A")
-        
-        st.write("**EBITDA:**")
-        if not np.isnan(items_found.get('ebitda', np.nan)):
-            st.write(f"€ {items_found['ebitda']:,.2f}")
-        else:
-            st.write("N/A")
-        
-        st.write("**Cost of Employees:**")
-        if not np.isnan(items_found.get('cost_of_employees', np.nan)):
-            st.write(f"€ {items_found['cost_of_employees']:,.2f}")
-        else:
-            st.write("N/A")
-    
-    st.markdown("---")
-    st.subheader("📈 Financial Ratios vs. Sector Benchmarks")
-    
-    # Get category code from waccmap for percentile lookup
-    # For now, we'll display general metrics without category-specific benchmarks
-    # User will need to provide category_code
-    
-    # Display all three metrics with sector comparison
-    st.write("**Metric 1: LTDE (Long-term Debt / Shareholders' Funds)**")
-    st.write("*Measures financial leverage - higher values indicate more debt relative to equity*")
-    col1, col2 = st.columns(2)
-    with col1:
-        if not np.isnan(company_metrics.get('ltde', np.nan)):
-            st.metric("Company LTDE", f"{company_metrics['ltde']:.4f}")
-        else:
-            st.metric("Company LTDE", "N/A")
-    
-    st.markdown("---")
-    
-    st.write("**Metric 2: EDAMARGIN (EBITDA / Operating Revenue)**")
-    st.write("*Measures operational profitability - higher values indicate better operational efficiency*")
-    col1, col2 = st.columns(2)
-    with col1:
-        if not np.isnan(company_metrics.get('edamargin', np.nan)):
-            st.metric("Company EDAMARGIN", f"{company_metrics['edamargin']:.4f}")
-        else:
-            st.metric("Company EDAMARGIN", "N/A")
-    
-    st.markdown("---")
-    
-    st.write("**Metric 3: FX (Cost of Employees / Operating Revenue)**")
-    st.write("*Measures labor cost intensity - higher values indicate higher employee costs relative to revenue*")
-    col1, col2 = st.columns(2)
-    with col1:
-        if not np.isnan(company_metrics.get('fx', np.nan)):
-            st.metric("Company FX", f"{company_metrics['fx']:.4f}")
-        else:
-            st.metric("Company FX", "N/A")
-    
-    st.markdown("---")
-    
-    # Summary table
-    st.subheader("📊 Metrics Summary")
-    summary_data = {
-        'Metric': ['LTDE', 'EDAMARGIN', 'FX'],
-        'Company Value': [
-            f"{company_metrics.get('ltde', np.nan):.4f}" if not np.isnan(company_metrics.get('ltde', np.nan)) else 'N/A',
-            f"{company_metrics.get('edamargin', np.nan):.4f}" if not np.isnan(company_metrics.get('edamargin', np.nan)) else 'N/A',
-            f"{company_metrics.get('fx', np.nan):.4f}" if not np.isnan(company_metrics.get('fx', np.nan)) else 'N/A'
-        ]
-    }
-    
-    summary_df = pd.DataFrame(summary_data)
-    st.dataframe(summary_df, use_container_width=True)
-
-def frame2_placeholder():
-    """Frame 2: Placeholder for future development"""
-    st.subheader("📊 Frame 2: Additional Analysis")
-    st.info("🚧 Frame 2 - Under Development")
-    st.write("This frame is reserved for additional financial metrics and analysis.")
-
-def frame3_placeholder():
-    """Frame 3: Placeholder for future development"""
-    st.subheader("📊 Frame 3: Risk Assessment")
-    st.info("🚧 Frame 3 - Under Development")
-    st.write("This frame is reserved for risk assessment and valuation metrics.")
 
 def create_filtered_search(db, portfolio_df, nace_mapping):
     """Create filtered search interface for deal matching"""
@@ -464,6 +388,141 @@ def create_filtered_search(db, portfolio_df, nace_mapping):
     
     return filtered_db.iloc[selected_match]
 
+def frame1_analysis(dataset_df, waccmap, company_name, company_metrics, extraction_note, items_found):
+    """Frame 1: Analysis with metrics calculation and sector comparison"""
+    st.subheader("📊 Frame 1: Financial Metrics Analysis")
+    
+    # Lookup category_code from dataset
+    category_code = get_company_category_code(company_name, dataset_df)
+    
+    st.write(f"**Analysis for:** {company_name}")
+    st.write(f"**Data Source:** {extraction_note}")
+    if category_code:
+        st.write(f"**Category Code:** {category_code}")
+    else:
+        st.warning(f"⚠️ Category code not found for {company_name} in dataset")
+    
+    st.markdown("---")
+    
+    # Display extracted financial statement items
+    st.subheader("📋 Extracted Financial Data")
+    
+    items_col1, items_col2 = st.columns(2)
+    with items_col1:
+        st.write("**Long-term Debt:**")
+        if not np.isnan(items_found.get('long_term_debt', np.nan)):
+            st.write(f"€ {items_found['long_term_debt']:,.2f}")
+        else:
+            st.write("N/A")
+        
+        st.write("**Shareholders Funds:**")
+        if not np.isnan(items_found.get('shareholders_funds', np.nan)):
+            st.write(f"€ {items_found['shareholders_funds']:,.2f}")
+        else:
+            st.write("N/A")
+    
+    with items_col2:
+        st.write("**Operating Revenue:**")
+        if not np.isnan(items_found.get('operating_revenue', np.nan)):
+            st.write(f"€ {items_found['operating_revenue']:,.2f}")
+        else:
+            st.write("N/A")
+        
+        st.write("**EBITDA:**")
+        if not np.isnan(items_found.get('ebitda', np.nan)):
+            st.write(f"€ {items_found['ebitda']:,.2f}")
+        else:
+            st.write("N/A")
+        
+        st.write("**Cost of Employees:**")
+        if not np.isnan(items_found.get('cost_of_employees', np.nan)):
+            st.write(f"€ {items_found['cost_of_employees']:,.2f}")
+        else:
+            st.write("N/A")
+    
+    st.markdown("---")
+    
+    # Get sector percentiles if category_code is found
+    if category_code:
+        sector_percentiles = get_sector_percentiles(category_code, waccmap)
+        
+        st.subheader("📈 Company Metrics vs. Sector Benchmarks")
+        st.write(f"*Comparing against {category_code} sector (10th, 25th, 50th, 75th, 90th percentiles)*")
+        st.markdown("---")
+        
+        # Display each metric with sector comparison
+        display_metric_comparison(company_metrics, sector_percentiles, 'ltde', 
+                                 'Metric 1: LTDE (Long-term Debt / Shareholders\' Funds)')
+        st.write("*Measures financial leverage - lower values indicate less debt relative to equity*")
+        st.markdown("---")
+        
+        display_metric_comparison(company_metrics, sector_percentiles, 'edamargin',
+                                 'Metric 2: EDAMARGIN (EBITDA / Operating Revenue)')
+        st.write("*Measures operational profitability - higher values indicate better operational efficiency*")
+        st.markdown("---")
+        
+        display_metric_comparison(company_metrics, sector_percentiles, 'fx',
+                                 'Metric 3: FX (Cost of Employees / Operating Revenue)')
+        st.write("*Measures labor cost intensity - lower values indicate lower employee costs relative to revenue*")
+        st.markdown("---")
+        
+        # Summary table
+        st.subheader("📊 Metrics Summary Table")
+        
+        summary_data = {
+            'Metric': ['LTDE', 'EDAMARGIN', 'FX'],
+            'Company Value': [
+                f"{company_metrics.get('ltde', np.nan):.4f}" if not np.isnan(company_metrics.get('ltde', np.nan)) else 'N/A',
+                f"{company_metrics.get('edamargin', np.nan):.4f}" if not np.isnan(company_metrics.get('edamargin', np.nan)) else 'N/A',
+                f"{company_metrics.get('fx', np.nan):.4f}" if not np.isnan(company_metrics.get('fx', np.nan)) else 'N/A'
+            ],
+            'P10': [
+                f"{sector_percentiles.get('ltde', {}).get('p10', np.nan):.4f}" if not np.isnan(sector_percentiles.get('ltde', {}).get('p10', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('edamargin', {}).get('p10', np.nan):.4f}" if not np.isnan(sector_percentiles.get('edamargin', {}).get('p10', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('fx', {}).get('p10', np.nan):.4f}" if not np.isnan(sector_percentiles.get('fx', {}).get('p10', np.nan)) else 'N/A'
+            ],
+            'P25': [
+                f"{sector_percentiles.get('ltde', {}).get('p25', np.nan):.4f}" if not np.isnan(sector_percentiles.get('ltde', {}).get('p25', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('edamargin', {}).get('p25', np.nan):.4f}" if not np.isnan(sector_percentiles.get('edamargin', {}).get('p25', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('fx', {}).get('p25', np.nan):.4f}" if not np.isnan(sector_percentiles.get('fx', {}).get('p25', np.nan)) else 'N/A'
+            ],
+            'P50 (Median)': [
+                f"{sector_percentiles.get('ltde', {}).get('p50', np.nan):.4f}" if not np.isnan(sector_percentiles.get('ltde', {}).get('p50', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('edamargin', {}).get('p50', np.nan):.4f}" if not np.isnan(sector_percentiles.get('edamargin', {}).get('p50', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('fx', {}).get('p50', np.nan):.4f}" if not np.isnan(sector_percentiles.get('fx', {}).get('p50', np.nan)) else 'N/A'
+            ],
+            'P75': [
+                f"{sector_percentiles.get('ltde', {}).get('p75', np.nan):.4f}" if not np.isnan(sector_percentiles.get('ltde', {}).get('p75', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('edamargin', {}).get('p75', np.nan):.4f}" if not np.isnan(sector_percentiles.get('edamargin', {}).get('p75', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('fx', {}).get('p75', np.nan):.4f}" if not np.isnan(sector_percentiles.get('fx', {}).get('p75', np.nan)) else 'N/A'
+            ],
+            'P90': [
+                f"{sector_percentiles.get('ltde', {}).get('p90', np.nan):.4f}" if not np.isnan(sector_percentiles.get('ltde', {}).get('p90', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('edamargin', {}).get('p90', np.nan):.4f}" if not np.isnan(sector_percentiles.get('edamargin', {}).get('p90', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('fx', {}).get('p90', np.nan):.4f}" if not np.isnan(sector_percentiles.get('fx', {}).get('p90', np.nan)) else 'N/A'
+            ]
+        }
+        
+        summary_df = pd.DataFrame(summary_data)
+        st.dataframe(summary_df, use_container_width=True)
+    else:
+        st.warning("Cannot display sector benchmarks - category code not found for this company")
+
+def frame2_placeholder():
+    """Frame 2: Placeholder for future development"""
+    st.subheader("📊 Frame 2: Valuation")
+    st.info("🚧 Frame 2 - Under Development")
+
+def frame3_placeholder():
+    """Frame 3: Placeholder for future development"""
+    st.subheader("📊 Frame 3: Predictable")
+    st.info("🚧 Frame 3 - Under Development")
+
+def frame4_placeholder():
+    """Frame 4: Placeholder for future development"""
+    st.subheader("📊 Frame 4: Contacts")
+    st.info("🚧 Frame 3 - Under Development")
+
 def show_search(df, waccmap):
     """Display search interface and run DCF analysis - Review Company mode"""
     st.subheader("🏢 Review Company - Evaluate Individual Company")
@@ -552,16 +611,19 @@ def show_search(df, waccmap):
                         
                         if company_metrics:
                             # Create tabs for three frames
-                            tab1, tab2, tab3 = st.tabs(["Frame 1: Metrics Analysis", "Frame 2: Additional Analysis", "Frame 3: Risk Assessment"])
+                            tab1, tab2, tab3, tab4 = st.tabs(["Frame 1: FS analysis", "Frame 2: Valuation", "Frame 3: Predictable", "Frame 4: Contacts"])
                             
                             with tab1:
-                                frame1_analysis(waccmap, r['company'], company_metrics, extraction_note, items_found)
+                                frame1_analysis(df, waccmap, r['company'], company_metrics, extraction_note, items_found)
                             
                             with tab2:
                                 frame2_placeholder()
                             
                             with tab3:
                                 frame3_placeholder()
+                            
+                            with tab4:
+                                frame4_placeholder()
                         else:
                             st.error("Could not calculate ratios from extracted data")
                     else:
@@ -752,7 +814,11 @@ def main():
             st.write("**Required row items:**")
             for key, item_name in FINANCIAL_ITEMS.items():
                 st.text(f"• {item_name}")
+            
+            st.write("**WACC file must include percentile columns:**")
+            st.write("• ltde10th, ltde25th, ltde50th, ltde75th, ltde90th")
+            st.write("• edamarg10th, edamarg25th, edamarg50th, edamarg75th, edamarg90th")
+            st.write("• fx10th, fx25th, fx50th, fx75th, fx90th")
 
 if __name__ == "__main__":
     main()
-
