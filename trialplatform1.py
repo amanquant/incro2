@@ -34,20 +34,23 @@ def validate_columns(df, file_type="Dataset", required_cols=None):
     return True
 
 def extract_date_columns(df):
+    """Extract date columns from dataframe (date format like 31/12/2024)"""
     date_cols = []
-    try:
-        parsed_date = pd.to_datetime(col, format='%d/%m/%Y', errors='coerce')
-        if pd.notna(parsed_date):
-            date_cols.append((col, parsed_date))
-    except:
-        pass
-        
-    return date_cols
+    
+    for col in df.columns:
+        if col.lower() == 'value':
+            continue
+        try:
+            # Try to parse as date
+            parsed_date = pd.to_datetime(col, format='%d/%m/%Y', errors='coerce')
+            if pd.notna(parsed_date):
+                date_cols.append((col, parsed_date))
+        except:
+            pass
     
     # Sort by date in descending order (latest first)
     date_cols.sort(key=lambda x: x[1], reverse=True)
     return [col[0] for col in date_cols]  # Return just column names
-
 def find_financial_item(df, item_name):
     """Find a financial statement item by name (fuzzy matching)"""
     value_col = df.columns[0]  # First column is "Value"
@@ -818,6 +821,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
