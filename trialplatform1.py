@@ -11,6 +11,10 @@ COLUMNS_REQUIRED = [
 
 COLUMNS_PORTFOLIO = ["company", "sector", "revenue", "employees"]
 
+ANALYSIS_COLUMNS_REQUIRED = [
+    "company", "nace", "lt debt", "sh equity", "ebitda", "operating revenue", "cost of employees", "category_code"
+]
+
 def validate_columns(df, file_type="Dataset", required_cols=None):
     """Validate that the dataframe has all required columns"""
     if required_cols is None:
@@ -39,6 +43,201 @@ def fuzzy_match_companies(portfolio_company, db_companies, threshold=80):
         limit=5
     )
     return [match for match in matches if match[1] >= threshold]
+
+def calculate_company_metrics(row, analysis_df=None):
+    """Calculate LTDE, EDAMARGIN, and FX metrics for company"""
+    metrics = {}
+    
+    try:
+        # LTDE: Long term debt / Shareholders funds
+        sh_equity = row.get('sh equity', 0)
+        if sh_equity != 0:
+            ltde = row.get('lt debt', 0) / sh_equity
+        else:
+            ltde = np.nan
+        metrics['ltde'] = ltde
+    except:
+        metrics['ltde'] = np.nan
+    
+    try:
+        # EDAMARGIN: EBITDA / Operating revenue (Turnover)
+        operating_revenue = row.get('operating revenue', 0)
+        if operating_revenue != 0:
+            edamargin = row.get('ebitda', 0) / operating_revenue
+        else:
+            edamargin = np.nan
+        metrics['edamargin'] = edamargin
+    except:
+        metrics['edamargin'] = np.nan
+    
+    try:
+        # FX: Cost of employees / Operating revenue (Turnover)
+        operating_revenue = row.get('operating revenue', 0)
+        if operating_revenue != 0:
+            fx = row.get('cost of employees', 0) / operating_revenue
+        else:
+            fx = np.nan
+        metrics['fx'] = fx
+    except:
+        metrics['fx'] = np.nan
+    
+    return metrics
+
+def get_sector_percentiles(category_code, waccmap):
+    """Retrieve sector percentile ranges for LTDE, EDAMARGIN, FX"""
+    percentiles = {}
+    
+    category_data = waccmap[waccmap['category_code'].astype(str) == str(category_code)]
+    
+    if not category_data.empty:
+        row = category_data.iloc[0]
+        
+        # Extract percentile ranges
+        percentiles['ltde'] = {
+            'p10': row.get('ltde10th', np.nan),
+            'p90': row.get('ltde90th', np.nan)
+        }
+        percentiles['edamargin'] = {
+            'p10': row.get('edamarg10th', np.nan),
+            'p90': row.get('edamarg90th', np.nan)
+        }
+        percentiles['fx'] = {
+            'p10': row.get('fx10th', np.nan),
+            'p90': row.get('fx90th', np.nan)
+        }
+    
+    return percentiles
+
+def get_percentile_position(value, p10, p90):
+    """Calculate company's percentile position within sector range"""
+    if np.isnan(value) or np.isnan(p10) or np.isnan(p90):
+        return None, None
+    
+    if p90 == p10:
+        return 50, "Center"
+    
+    position = ((value - p10) / (p90 - p10)) * 100
+    position = max(0, min(100, position))  # Clamp between 0-100
+    
+    if position < 25:
+        quartile = "Q1 (Low)"
+    elif position < 50:
+        quartile = "Q2 (Below Median)"
+    elif position < 75:
+        quartile = "Q3 (Above Median)"
+    else:
+        quartile = "Q4 (High)"
+    
+    return position, quartile
+
+def display_metric_analysis(company_metrics, sector_percentiles, metric_name, metric_label):
+    """Display analysis for single metric with percentile comparison"""
+    company_value = company_metrics.get(metric_name, np.nan)
+    sector_range = sector_percentiles.get(metric_name, {})
+    p10 = sector_range.get('p10', np.nan)
+    p90 = sector_range.get('p90', np.nan)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if not np.isnan(company_value):
+            st.metric(f"Company {metric_label}", f"{company_value:.4f}")
+        else:
+            st.metric(f"Company {metric_label}", "N/A")
+    
+    with col2:
+        if not np.isnan(p10) and not np.isnan(p90):
+            st.metric("Sector P10-P90", f"{p10:.4f} - {p90:.4f}")
+        else:
+            st.metric("Sector P10-P90", "N/A")
+    
+    with col3:
+        percentile_pos, quartile = get_percentile_position(company_value, p10, p90)
+        if percentile_pos is not None:
+            st.metric("Quartile Position", f"{percentile_pos:.1f}%\n{quartile}")
+        else:
+            st.metric("Quartile Position", "N/A")
+
+def frame1_analysis(df_analysis, waccmap, company_row):
+    """Frame 1: Analysis with metrics calculation and sector comparison"""
+    st.subheader("📊 Frame 1: Financial Metrics Analysis")
+    
+    # Calculate company metrics
+    company_metrics = calculate_company_metrics(company_row)
+    
+    # Get sector percentiles from WACC map
+    category_code = company_row.get('category_code', None)
+    sector_percentiles = get_sector_percentiles(category_code, waccmap)
+    
+    st.write(f"**Analysis for:** {company_row.get('company', 'Unknown Company')}")
+    st.write(f"**Category Code:** {category_code}")
+    st.markdown("---")
+    
+    # Display all three metrics with sector comparison
+    st.write("**Metric 1: LTDE (Long-term Debt / Shareholders' Equity)**")
+    display_metric_analysis(company_metrics, sector_percentiles, 'ltde', 'LTDE')
+    st.write("Measures financial leverage - higher values indicate more debt relative to equity.")
+    
+    st.markdown("---")
+    
+    st.write("**Metric 2: EDAMARGIN (EBITDA / Operating Revenue)**")
+    display_metric_analysis(company_metrics, sector_percentiles, 'edamargin', 'EDAMARGIN')
+    st.write("Measures operational profitability - higher values indicate better operational efficiency.")
+    
+    st.markdown("---")
+    
+    st.write("**Metric 3: FX (Cost of Employees / Operating Revenue)**")
+    display_metric_analysis(company_metrics, sector_percentiles, 'fx', 'FX')
+    st.write("Measures labor cost intensity - higher values indicate higher employee costs relative to revenue.")
+    
+    st.markdown("---")
+    
+    # Summary table
+    st.subheader("📋 Metrics Summary")
+    summary_data = {
+        'Metric': ['LTDE', 'EDAMARGIN', 'FX'],
+        'Company Value': [
+            f"{company_metrics.get('ltde', np.nan):.4f}" if not np.isnan(company_metrics.get('ltde', np.nan)) else 'N/A',
+            f"{company_metrics.get('edamargin', np.nan):.4f}" if not np.isnan(company_metrics.get('edamargin', np.nan)) else 'N/A',
+            f"{company_metrics.get('fx', np.nan):.4f}" if not np.isnan(company_metrics.get('fx', np.nan)) else 'N/A'
+        ],
+        'Sector P10': [
+            f"{sector_percentiles.get('ltde', {}).get('p10', np.nan):.4f}" if not np.isnan(sector_percentiles.get('ltde', {}).get('p10', np.nan)) else 'N/A',
+            f"{sector_percentiles.get('edamargin', {}).get('p10', np.nan):.4f}" if not np.isnan(sector_percentiles.get('edamargin', {}).get('p10', np.nan)) else 'N/A',
+            f"{sector_percentiles.get('fx', {}).get('p10', np.nan):.4f}" if not np.isnan(sector_percentiles.get('fx', {}).get('p10', np.nan)) else 'N/A'
+        ],
+        'Sector P90': [
+            f"{sector_percentiles.get('ltde', {}).get('p90', np.nan):.4f}" if not np.isnan(sector_percentiles.get('ltde', {}).get('p90', np.nan)) else 'N/A',
+            f"{sector_percentiles.get('edamargin', {}).get('p90', np.nan):.4f}" if not np.isnan(sector_percentiles.get('edamargin', {}).get('p90', np.nan)) else 'N/A',
+            f"{sector_percentiles.get('fx', {}).get('p90', np.nan):.4f}" if not np.isnan(sector_percentiles.get('fx', {}).get('p90', np.nan)) else 'N/A'
+        ],
+        'Position': [
+            get_percentile_position(company_metrics.get('ltde', np.nan), 
+                                   sector_percentiles.get('ltde', {}).get('p10', np.nan),
+                                   sector_percentiles.get('ltde', {}).get('p90', np.nan))[1] or 'N/A',
+            get_percentile_position(company_metrics.get('edamargin', np.nan),
+                                   sector_percentiles.get('edamargin', {}).get('p10', np.nan),
+                                   sector_percentiles.get('edamargin', {}).get('p90', np.nan))[1] or 'N/A',
+            get_percentile_position(company_metrics.get('fx', np.nan),
+                                   sector_percentiles.get('fx', {}).get('p10', np.nan),
+                                   sector_percentiles.get('fx', {}).get('p90', np.nan))[1] or 'N/A'
+        ]
+    }
+    
+    summary_df = pd.DataFrame(summary_data)
+    st.dataframe(summary_df, use_container_width=True)
+
+def frame2_placeholder():
+    """Frame 2: Placeholder for future development"""
+    st.subheader("📊 Frame 2: Additional Analysis")
+    st.info("🚧 Frame 2 - Under Development")
+    st.write("This frame is reserved for additional financial metrics and analysis.")
+
+def frame3_placeholder():
+    """Frame 3: Placeholder for future development"""
+    st.subheader("📊 Frame 3: Risk Assessment")
+    st.info("🚧 Frame 3 - Under Development")
+    st.write("This frame is reserved for risk assessment and valuation metrics.")
 
 def create_filtered_search(db, portfolio_df, nace_mapping):
     """Create filtered search interface for deal matching"""
@@ -206,6 +405,47 @@ def show_search(df, waccmap):
             st.write("**DCF Parameters Used:**")
             params_df = pd.DataFrame([dcf_result['params']])
             st.dataframe(params_df, use_container_width=True)
+        
+        # Three-frame analysis section
+        st.markdown("---")
+        st.subheader("📈 Company Analysis Review")
+        
+        # Upload analysis file for detailed metrics
+        analysis_file = st.file_uploader(
+            f"Upload Analysis Data (XLSX) for {r['company']} - For metrics calculation",
+            type="xlsx",
+            key=f"analysis_upload_{i}",
+            help="Upload file with columns: company, nace, lt debt, sh equity, ebitda, operating revenue, cost of employees, category_code"
+        )
+        
+        if analysis_file:
+            try:
+                df_analysis = pd.read_excel(analysis_file)
+                
+                # Find matching company in analysis file
+                matching_analysis = df_analysis[df_analysis['company'].str.contains(r['company'], case=False, na=False)]
+                
+                if not matching_analysis.empty:
+                    company_analysis_row = matching_analysis.iloc[0]
+                    
+                    # Create tabs for three frames
+                    tab1, tab2, tab3 = st.tabs(["Frame 1: Metrics Analysis", "Frame 2: Additional Analysis", "Frame 3: Risk Assessment"])
+                    
+                    with tab1:
+                        frame1_analysis(df_analysis, waccmap, company_analysis_row)
+                    
+                    with tab2:
+                        frame2_placeholder()
+                    
+                    with tab3:
+                        frame3_placeholder()
+                else:
+                    st.warning(f"No matching company found in analysis file for '{r['company']}'")
+            
+            except Exception as e:
+                st.error(f"Error loading analysis file: {str(e)}")
+        else:
+            st.info("💡 Upload an analysis file to see detailed metrics comparison with sector benchmarks")
 
 def DCF_automated(company_row, waccmap, years=5):
     """Calculate DCF valuation for a company"""
