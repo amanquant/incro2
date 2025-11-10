@@ -539,8 +539,7 @@ def frame1_analysis(dataset_df, waccmap, company_name, company_metrics, extracti
         st.write(f"*Comparing against {category_code} sector (10th, 25th, 50th, 75th, 90th percentiles)*")
         st.markdown("---")
         
-        display_metric_comparison(company_metrics, sector_percentiles, 'ltde', 
-                                 'Metric 1: LTDE (Long-term Debt / Shareholders\\' Funds)')
+        display_metric_comparison(company_metrics, sector_percentiles, 'ltde', 'Metric 1: LTDE (Long-term Debt / Shareholders Funds)')
         st.write("*Measures financial leverage - lower values indicate less debt relative to equity*")
         st.markdown("---")
         
@@ -1222,3 +1221,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
