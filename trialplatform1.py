@@ -31,16 +31,6 @@ PREDICTABILITY_CATEGORIES = {
     "0,8": "optimal conditions"
 }
 
-# Sample events for network matching (preset dictionary)
-SAMPLE_EVENTS = {
-    "E001": {"name": "London Tech Summit 2025", "date": "2025-03-15", "industry": "Technology"},
-    "E002": {"name": "Financial Innovation Forum", "date": "2025-04-22", "industry": "Finance"},
-    "E003": {"name": "Healthcare Sector Conference", "date": "2025-05-10", "industry": "Healthcare"},
-    "E004": {"name": "Manufacturing Excellence Summit", "date": "2025-06-05", "industry": "Manufacturing"},
-    "E005": {"name": "Retail & E-Commerce Forum", "date": "2025-07-20", "industry": "Retail"},
-    "E006": {"name": "Industrial Leaders Convention", "date": "2025-08-15", "industry": "Industrial"},
-}
-
 def validate_columns(df, file_type="Dataset", required_cols=None):
     """Validate that the dataframe has all required columns"""
     if required_cols is None:
@@ -298,26 +288,27 @@ def get_contacts_by_company_id(company_id, contacts_df):
     company_contacts = contacts_df[contacts_df['companyID'] == company_id]
     return company_contacts if not company_contacts.empty else None
 
-def get_contact_by_role_and_id(contact_id, contacts_df):
-    """Get contact by contactID"""
-    if contacts_df is None:
-        return None
-    
-    if 'contactID' not in contacts_df.columns:
+def get_contact_by_id(contact_id, contacts_df):
+    """Get specific contact by contactID"""
+    if contacts_df is None or 'contactID' not in contacts_df.columns:
         return None
     
     contact = contacts_df[contacts_df['contactID'] == contact_id]
     return contact.iloc[0] if not contact.empty else None
 
-def get_related_contacts(contact_id, contacts_df):
-    """Get contacts that have a relationship with given contact (via relative column)"""
+def get_related_contacts_by_relative(contact_id, contacts_df):
+    """
+    Get contacts that have relationship with given contact via 'relative' column
+    Returns DataFrame of all contacts where relative == contact_id
+    """
     if contacts_df is None:
         return None
     
     if 'contactID' not in contacts_df.columns or 'relative' not in contacts_df.columns:
         return None
     
-    related = contacts_df[contacts_df['contactIDrelative'] == contact_id]
+    # Find all contacts where the 'relative' column equals the given contact_id
+    related = contacts_df[contacts_df['relative'] == contact_id]
     return related if not related.empty else None
 
 def predictability_decision_tree(ev_growth, nsellside, nsellside_p50, ceo_age, revenue, edamargin, edamargin_p75):
@@ -539,7 +530,8 @@ def frame1_analysis(dataset_df, waccmap, company_name, company_metrics, extracti
         st.write(f"*Comparing against {category_code} sector (10th, 25th, 50th, 75th, 90th percentiles)*")
         st.markdown("---")
         
-        display_metric_comparison(company_metrics, sector_percentiles, 'ltde', 'Metric 1: LTDE (Long-term Debt / Shareholders Funds)')
+        display_metric_comparison(company_metrics, sector_percentiles, 'ltde', 
+                                 'Metric 1: LTDE (Long-term Debt / Shareholders\' Funds)')
         st.write("*Measures financial leverage - lower values indicate less debt relative to equity*")
         st.markdown("---")
         
@@ -829,21 +821,30 @@ def frame4_contacts(company_row, contacts_df):
     
     # ACTION FRAME 2: Network Match
     st.subheader("🌐 Frame 2: Network Match")
+    st.write(f"**Looking up network connections for:** {contact_name}")
     
     if contact_id is None:
         st.warning("⚠️ Contact ID not found")
     else:
         # Check for related contacts (network match)
-        related_contacts = get_related_contacts(contact_id, contacts_df)
+        # Query 'relative' column for contacts where relative == contact_id
+        related_contacts = get_related_contacts_by_relative(contact_id, contacts_df)
         
         if related_contacts is not None and not related_contacts.empty:
             st.success(f"✅ I found {len(related_contacts)} match(es) already in your contact list!")
+            st.markdown("---")
             
-            for idx, related in related_contacts.iterrows():
+            for idx, (row_idx, related) in enumerate(related_contacts.iterrows()):
+                # Extract full contact info for each related contact
                 related_name = related.get('name', 'Unknown')
                 related_role = related.get('role', 'Unknown')
+                related_contact_id = related.get('contactID', None)
+                related_linkedin = related.get('linkedin', '')
+                related_mobile = related.get('mobile', '')
+                related_email = related.get('email', '')
                 
                 st.write(f"**{related_name}** - {related_role}")
+                st.info(f"📇 Contact Info: {related_email} | {related_mobile}")
                 
                 should_contact = st.radio(
                     f"Should we contact {related_name}?",
@@ -852,65 +853,66 @@ def frame4_contacts(company_row, contacts_df):
                 )
                 
                 if should_contact == "Yes":
-                    # Repeat contact linkage options
+                    # Repeat contact linkage options for related contact
                     st.write("**Choose a communication channel:**")
                     related_col1, related_col2, related_col3 = st.columns(3)
                     
+                    # LinkedIn option for related contact
+                    has_linkedin_rel = pd.notna(related_linkedin) and related_linkedin.strip() != ''
                     with related_col1:
-                        if st.button(f"💼 LinkedIn - {related_name}", key=f"linkedin_related_{idx}"):
-                            linkedin_url = related.get('linkedin', '')
-                            st.markdown(f"**[Here]({linkedin_url})**")
+                        if st.button(f"💼 LinkedIn - {related_name}", disabled=not has_linkedin_rel, key=f"linkedin_related_{idx}"):
+                            if related_linkedin:
+                                st.markdown(f"**[Here]({related_linkedin})**")
+                                st.success("✅ LinkedIn link ready!")
                     
+                    # Mobile option for related contact
+                    has_mobile_rel = pd.notna(related_mobile) and related_mobile.strip() != ''
                     with related_col2:
-                        if st.button(f"📱 Call - {related_name}", key=f"mobile_related_{idx}"):
-                            mobile = related.get('mobile', 'N/A')
-                            st.write(f"**Phone:** {mobile}")
+                        if st.button(f"📱 Call - {related_name}", disabled=not has_mobile_rel, key=f"mobile_related_{idx}"):
+                            st.write(f"**Phone:** {related_mobile}")
+                            st.success("☎️ Ready to call!")
                     
+                    # Email option for related contact
+                    has_email_rel = pd.notna(related_email) and related_email.strip() != ''
                     with related_col3:
-                        if st.button(f"✉️ Email - {related_name}", key=f"email_related_{idx}"):
-                            email = related.get('email', 'N/A')
-                            st.write(f"**Email:** {email}")
+                        if st.button(f"✉️ Email - {related_name}", disabled=not has_email_rel, key=f"email_related_{idx}"):
+                            st.write(f"**Email:** {related_email}")
+                            st.success("✉️ Email ready!")
                 
-                elif should_contact == "No":
-                    st.write("**Suggested Events to Meet:**")
-                    
-                    events_col1, events_col2 = st.columns(2)
-                    
-                    with events_col1:
-                        for event_id, event_info in list(SAMPLE_EVENTS.items())[:3]:
-                            st.write(f"📅 **{event_info['name']}**")
-                            st.write(f"📍 {event_info['date']}")
-                            st.write(f"🏢 {event_info['industry']}")
-                            st.markdown("---")
-                    
-                    with events_col2:
-                        for event_id, event_info in list(SAMPLE_EVENTS.items())[3:]:
-                            st.write(f"📅 **{event_info['name']}**")
-                            st.write(f"📍 {event_info['date']}")
-                            st.write(f"🏢 {event_info['industry']}")
-                            st.markdown("---")
+                st.markdown("---")
         
         else:
-            st.info("ℹ️ No network matches found. But here are suggested events to expand your network:")
+            st.info("ℹ️ No network matches found in your contact list.")
+            st.write("**Suggested Events to Expand Your Network:**")
             
+            # Display sample events
             events_col1, events_col2, events_col3 = st.columns(3)
             
+            sample_events = {
+                "E001": {"name": "London Tech Summit 2025", "date": "2025-03-15", "industry": "Technology"},
+                "E002": {"name": "Financial Innovation Forum", "date": "2025-04-22", "industry": "Finance"},
+                "E003": {"name": "Healthcare Sector Conference", "date": "2025-05-10", "industry": "Healthcare"},
+                "E004": {"name": "Manufacturing Excellence Summit", "date": "2025-06-05", "industry": "Manufacturing"},
+                "E005": {"name": "Retail & E-Commerce Forum", "date": "2025-07-20", "industry": "Retail"},
+                "E006": {"name": "Industrial Leaders Convention", "date": "2025-08-15", "industry": "Industrial"},
+            }
+            
             with events_col1:
-                for event_id, event_info in list(SAMPLE_EVENTS.items())[:2]:
+                for event_id, event_info in list(sample_events.items())[:2]:
                     st.write(f"📅 **{event_info['name']}**")
                     st.write(f"📍 {event_info['date']}")
                     st.write(f"🏢 {event_info['industry']}")
                     st.markdown("---")
             
             with events_col2:
-                for event_id, event_info in list(SAMPLE_EVENTS.items())[2:4]:
+                for event_id, event_info in list(sample_events.items())[2:4]:
                     st.write(f"📅 **{event_info['name']}**")
                     st.write(f"📍 {event_info['date']}")
                     st.write(f"🏢 {event_info['industry']}")
                     st.markdown("---")
             
             with events_col3:
-                for event_id, event_info in list(SAMPLE_EVENTS.items())[4:]:
+                for event_id, event_info in list(sample_events.items())[4:]:
                     st.write(f"📅 **{event_info['name']}**")
                     st.write(f"📍 {event_info['date']}")
                     st.write(f"🏢 {event_info['industry']}")
@@ -1089,7 +1091,6 @@ def main():
     except:
         pass
     
-    st.markdown("**Automated DCF Valuation Platform**")
     st.markdown("---")
     
     st.sidebar.header("📁 Data Configuration")
@@ -1119,7 +1120,7 @@ def main():
         "Upload Contacts (XLSX) - Optional",
         type="xlsx",
         key="contacts_uploader",
-        help="Upload contacts file with CEO age information and network data (optional)"
+        help="Upload contacts file with companyID, contactID, name, role, linkedin, mobile, email, relative columns (optional)"
     )
     
     contacts_df = None
@@ -1217,10 +1218,7 @@ def main():
             st.write("• nsellside, nsellside50th (for Frame 3 predictability)")
             
             st.write("**Contacts file (optional) format:**")
-            st.write("• companyID, contactID, name, role, linkedin, mobile, email, relative, CEO, age")
+            st.write("• companyID, contactID, name, role, linkedin, mobile, email, relative")
 
 if __name__ == "__main__":
     main()
-
-
-
