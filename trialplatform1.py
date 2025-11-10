@@ -728,13 +728,10 @@ def show_search(df, waccmap, contacts_df):
                 df_analysis = pd.read_excel(analysis_file)
                 
                 st.info("📂 File structure detected:")
-                st.write(f"**Rows:** {len(df_analysis)}")
-                st.write(f"**Columns:** {list(df_analysis.columns)}")
                 
                 date_cols = extract_date_columns(df_analysis)
                 
                 if date_cols:
-                    st.write(f"**Date columns found:** {date_cols}")
                     st.write(f"**Latest year:** {date_cols[0]}")
                     
                     items_found, extraction_note = extract_financial_statement_data(df_analysis, date_cols)
@@ -970,6 +967,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
