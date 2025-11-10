@@ -48,7 +48,7 @@ def extract_date_columns(df):
     date_cols = []
     
     for col in df.columns:
-        if col.lower() == 'value':
+        if col == 'value':
             continue
         try:
             parsed_date = pd.to_datetime(col, format='%d/%m/%Y', errors='coerce')
@@ -970,4 +970,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
