@@ -508,7 +508,8 @@ def frame1_analysis(dataset_df, waccmap, company_name, company_metrics, extracti
 def frame2_placeholder():
     """Frame 2: Placeholder for future development"""
     st.subheader("📊 Frame 2: Valuation")
-    if st.button(f"Run DCF Automated for {r['company']}", key=f"dcfbtn{i}"):
+    for i, r in filtered_df.iterrows():
+        if st.button(f"Run DCF Automated for {r['company']}", key=f"dcfbtn{i}"):
         dcf_result = DCF_automated(r, waccmap)
         st.subheader("📊 DCF Automated Results")
         result_col1, result_col2, result_col3 = st.columns(3)
@@ -813,6 +814,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
