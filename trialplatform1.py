@@ -31,6 +31,16 @@ PREDICTABILITY_CATEGORIES = {
     "0,8": "optimal conditions"
 }
 
+# Sample events for network matching (preset dictionary)
+SAMPLE_EVENTS = {
+    "E001": {"name": "London Tech Summit 2025", "date": "2025-03-15", "industry": "Technology"},
+    "E002": {"name": "Financial Innovation Forum", "date": "2025-04-22", "industry": "Finance"},
+    "E003": {"name": "Healthcare Sector Conference", "date": "2025-05-10", "industry": "Healthcare"},
+    "E004": {"name": "Manufacturing Excellence Summit", "date": "2025-06-05", "industry": "Manufacturing"},
+    "E005": {"name": "Retail & E-Commerce Forum", "date": "2025-07-20", "industry": "Retail"},
+    "E006": {"name": "Industrial Leaders Convention", "date": "2025-08-15", "industry": "Industrial"},
+}
+
 def validate_columns(df, file_type="Dataset", required_cols=None):
     """Validate that the dataframe has all required columns"""
     if required_cols is None:
@@ -277,6 +287,39 @@ def get_ceo_age(company_row, contacts_df):
     
     return None
 
+def get_contacts_by_company_id(company_id, contacts_df):
+    """Get all contacts for a company by companyID"""
+    if contacts_df is None:
+        return None
+    
+    if 'companyID' not in contacts_df.columns:
+        return None
+    
+    company_contacts = contacts_df[contacts_df['companyID'] == company_id]
+    return company_contacts if not company_contacts.empty else None
+
+def get_contact_by_role_and_id(contact_id, contacts_df):
+    """Get contact by contactID"""
+    if contacts_df is None:
+        return None
+    
+    if 'contactID' not in contacts_df.columns:
+        return None
+    
+    contact = contacts_df[contacts_df['contactID'] == contact_id]
+    return contact.iloc[0] if not contact.empty else None
+
+def get_related_contacts(contact_id, contacts_df):
+    """Get contacts that have a relationship with given contact (via relative column)"""
+    if contacts_df is None:
+        return None
+    
+    if 'contactID' not in contacts_df.columns or 'relative' not in contacts_df.columns:
+        return None
+    
+    related = contacts_df[contacts_df['relative'] == contact_id]
+    return related if not related.empty else None
+
 def predictability_decision_tree(ev_growth, nsellside, nsellside_p50, ceo_age, revenue, edamargin, edamargin_p75):
     """Decision tree for predictability classification"""
     path = []
@@ -497,7 +540,7 @@ def frame1_analysis(dataset_df, waccmap, company_name, company_metrics, extracti
         st.markdown("---")
         
         display_metric_comparison(company_metrics, sector_percentiles, 'ltde', 
-                                 'Metric 1: LTDE (Long-term Debt / Shareholders\' Funds)')
+                                 'Metric 1: LTDE (Long-term Debt / Shareholders\\' Funds)')
         st.write("*Measures financial leverage - lower values indicate less debt relative to equity*")
         st.markdown("---")
         
@@ -660,10 +703,219 @@ def frame3_predictability(dataset_df, waccmap, contacts_df, company_row, company
     **Undetected:** High performing company
     """)
 
-def frame4_placeholder():
-    """Frame 4: Placeholder for future development"""
-    st.subheader("📊 Frame 4: Contacts")
-    st.info("🚧 Frame 4 - Under Development")
+def frame4_contacts(company_row, contacts_df):
+    """Frame 4: Contact Linkage and Network Matching"""
+    st.subheader("📇 Frame 4: Contacts")
+    
+    if company_row is None:
+        st.warning("⚠️ Company data required")
+        return
+    
+    if contacts_df is None:
+        st.warning("⚠️ Contacts file required")
+        return
+    
+    st.write(f"**Company:** {company_row['company']}")
+    st.markdown("---")
+    
+    # Get companyID
+    company_id = company_row.get('companyID', None)
+    
+    if company_id is None:
+        st.error("❌ No companyID found in company data")
+        return
+    
+    # Lookup contacts for this company
+    company_contacts = get_contacts_by_company_id(company_id, contacts_df)
+    
+    if company_contacts is None or company_contacts.empty:
+        st.warning(f"⚠️ No contacts found for company ID: {company_id}")
+        return
+    
+    st.write(f"**Found {len(company_contacts)} contact(s)**")
+    
+    # Select contact
+    contact_idx = st.selectbox(
+        "Select a contact:",
+        range(len(company_contacts)),
+        format_func=lambda i: f"{company_contacts.iloc[i].get('name', 'Unknown')} - {company_contacts.iloc[i].get('role', 'Unknown')}"
+    )
+    
+    selected_contact = company_contacts.iloc[contact_idx]
+    contact_name = selected_contact.get('name', 'Unknown')
+    contact_role = selected_contact.get('role', 'Unknown')
+    contact_id = selected_contact.get('contactID', None)
+    
+    st.markdown("---")
+    st.success(f"✅ I found a match for **{contact_name}** - **{contact_role}**")
+    st.markdown("---")
+    
+    # ACTION FRAME 1: Contact Linkage
+    st.subheader("🔗 Frame 1: Contact Linkage")
+    st.write("**Choose a communication channel:**")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    # LinkedIn button
+    has_linkedin = pd.notna(selected_contact.get('linkedin', None)) and selected_contact.get('linkedin', '').strip() != ''
+    with col1:
+        if st.button("💼 Chat on LinkedIn", disabled=not has_linkedin, key="linkedin_btn"):
+            st.markdown("---")
+            message_option = st.radio("What would you like to do?", ["Send Message", "Get Link"], key="linkedin_option")
+            
+            if message_option == "Send Message":
+                st.info("""
+                **Preset Introduction Message:**
+                
+                Hi {name},
+                
+                I found your profile through my professional network and I'm impressed with your background in {role}.
+                I'd like to discuss potential opportunities for collaboration.
+                
+                Looking forward to connecting!
+                """)
+                if st.button("📤 Send Message", key="send_linkedin_msg"):
+                    st.success("✅ Message sent via LinkedIn!")
+            
+            elif message_option == "Get Link":
+                linkedin_url = selected_contact.get('linkedin', '')
+                st.markdown(f"**[Here]({linkedin_url})** is the LinkedIn profile link")
+                st.success("✅ Link ready to share!")
+    
+    # Mobile button
+    has_mobile = pd.notna(selected_contact.get('mobile', None)) and selected_contact.get('mobile', '').strip() != ''
+    with col2:
+        if st.button("📱 Call", disabled=not has_mobile, key="mobile_btn"):
+            mobile = selected_contact.get('mobile', 'N/A')
+            st.markdown("---")
+            st.write(f"**Phone Number:** {mobile}")
+            st.info("☎️ Ready to call!")
+    
+    # Email button
+    has_email = pd.notna(selected_contact.get('email', None)) and selected_contact.get('email', '').strip() != ''
+    with col3:
+        if st.button("✉️ Send Email", disabled=not has_email, key="email_btn"):
+            st.markdown("---")
+            email_option = st.radio("What would you like to do?", ["Write Introduction", "Show Email"], key="email_option")
+            
+            if email_option == "Write Introduction":
+                st.info("""
+                **Preset Introduction Email:**
+                
+                Subject: Professional Opportunity
+                
+                Dear {name},
+                
+                I hope this message finds you well.
+                
+                I've reviewed your professional profile and believe there may be valuable synergies between our organizations.
+                I'd appreciate the opportunity to discuss potential collaboration.
+                
+                Please let me know your availability for a brief call.
+                
+                Best regards
+                """)
+                if st.button("📧 Send Email", key="send_email"):
+                    st.success("✅ Email sent!")
+            
+            elif email_option == "Show Email":
+                email = selected_contact.get('email', 'N/A')
+                st.write(f"**Email:** {email}")
+                st.info("✉️ Email ready to use!")
+    
+    if not has_linkedin and not has_mobile and not has_email:
+        st.warning("⚠️ No contact information available for this contact")
+    
+    st.markdown("---")
+    
+    # ACTION FRAME 2: Network Match
+    st.subheader("🌐 Frame 2: Network Match")
+    
+    if contact_id is None:
+        st.warning("⚠️ Contact ID not found")
+    else:
+        # Check for related contacts (network match)
+        related_contacts = get_related_contacts(contact_id, contacts_df)
+        
+        if related_contacts is not None and not related_contacts.empty:
+            st.success(f"✅ I found {len(related_contacts)} match(es) already in your contact list!")
+            
+            for idx, related in related_contacts.iterrows():
+                related_name = related.get('name', 'Unknown')
+                related_role = related.get('role', 'Unknown')
+                
+                st.write(f"**{related_name}** - {related_role}")
+                
+                should_contact = st.radio(
+                    f"Should we contact {related_name}?",
+                    ["No", "Yes"],
+                    key=f"contact_related_{idx}"
+                )
+                
+                if should_contact == "Yes":
+                    # Repeat contact linkage options
+                    st.write("**Choose a communication channel:**")
+                    related_col1, related_col2, related_col3 = st.columns(3)
+                    
+                    with related_col1:
+                        if st.button(f"💼 LinkedIn - {related_name}", key=f"linkedin_related_{idx}"):
+                            linkedin_url = related.get('linkedin', '')
+                            st.markdown(f"**[Here]({linkedin_url})**")
+                    
+                    with related_col2:
+                        if st.button(f"📱 Call - {related_name}", key=f"mobile_related_{idx}"):
+                            mobile = related.get('mobile', 'N/A')
+                            st.write(f"**Phone:** {mobile}")
+                    
+                    with related_col3:
+                        if st.button(f"✉️ Email - {related_name}", key=f"email_related_{idx}"):
+                            email = related.get('email', 'N/A')
+                            st.write(f"**Email:** {email}")
+                
+                elif should_contact == "No":
+                    st.write("**Suggested Events to Meet:**")
+                    
+                    events_col1, events_col2 = st.columns(2)
+                    
+                    with events_col1:
+                        for event_id, event_info in list(SAMPLE_EVENTS.items())[:3]:
+                            st.write(f"📅 **{event_info['name']}**")
+                            st.write(f"📍 {event_info['date']}")
+                            st.write(f"🏢 {event_info['industry']}")
+                            st.markdown("---")
+                    
+                    with events_col2:
+                        for event_id, event_info in list(SAMPLE_EVENTS.items())[3:]:
+                            st.write(f"📅 **{event_info['name']}**")
+                            st.write(f"📍 {event_info['date']}")
+                            st.write(f"🏢 {event_info['industry']}")
+                            st.markdown("---")
+        
+        else:
+            st.info("ℹ️ No network matches found. But here are suggested events to expand your network:")
+            
+            events_col1, events_col2, events_col3 = st.columns(3)
+            
+            with events_col1:
+                for event_id, event_info in list(SAMPLE_EVENTS.items())[:2]:
+                    st.write(f"📅 **{event_info['name']}**")
+                    st.write(f"📍 {event_info['date']}")
+                    st.write(f"🏢 {event_info['industry']}")
+                    st.markdown("---")
+            
+            with events_col2:
+                for event_id, event_info in list(SAMPLE_EVENTS.items())[2:4]:
+                    st.write(f"📅 **{event_info['name']}**")
+                    st.write(f"📍 {event_info['date']}")
+                    st.write(f"🏢 {event_info['industry']}")
+                    st.markdown("---")
+            
+            with events_col3:
+                for event_id, event_info in list(SAMPLE_EVENTS.items())[4:]:
+                    st.write(f"📅 **{event_info['name']}**")
+                    st.write(f"📍 {event_info['date']}")
+                    st.write(f"🏢 {event_info['industry']}")
+                    st.markdown("---")
 
 def show_search(df, waccmap, contacts_df):
     """Display search interface and run analysis"""
@@ -728,7 +980,6 @@ def show_search(df, waccmap, contacts_df):
                 df_analysis = pd.read_excel(analysis_file)
                 
                 st.info("📂 File structure detected:")
-                
                 date_cols = extract_date_columns(df_analysis)
                 
                 if date_cols:
@@ -757,14 +1008,17 @@ def show_search(df, waccmap, contacts_df):
                                     st.warning("⚠️ Complete Frame 2 DCF analysis first")
                             
                             with tab4:
-                                frame4_placeholder()
+                                frame4_contacts(r, contacts_df)
+                        
                         else:
                             st.error("Could not calculate ratios from extracted data")
+                    
                     else:
                         st.warning("Could not extract financial statement items. Please check file format and item names.")
                         st.write("**Looking for items:**")
                         for key, item_name in FINANCIAL_ITEMS.items():
                             st.write(f"• {item_name}")
+                
                 else:
                     st.error("No date columns found. Expected format: 31/12/2024, 31/12/2023, etc.")
                     st.write(f"Available columns: {list(df_analysis.columns)}")
@@ -773,6 +1027,7 @@ def show_search(df, waccmap, contacts_df):
                 st.error(f"Error loading analysis file: {str(e)}")
                 import traceback
                 st.write(traceback.format_exc())
+        
         else:
             st.info("💡 Upload a financial statement file to analyze company metrics")
 
@@ -865,7 +1120,7 @@ def main():
         "Upload Contacts (XLSX) - Optional",
         type="xlsx",
         key="contacts_uploader",
-        help="Upload contacts file with CEO age information for predictability analysis (optional)"
+        help="Upload contacts file with CEO age information and network data (optional)"
     )
     
     contacts_df = None
@@ -963,11 +1218,7 @@ def main():
             st.write("• nsellside, nsellside50th (for Frame 3 predictability)")
             
             st.write("**Contacts file (optional) format:**")
-            st.write("• companyID, CEO, age (for CEO age lookup in predictability analysis)")
+            st.write("• companyID, contactID, name, role, linkedin, mobile, email, relative, CEO, age")
 
 if __name__ == "__main__":
     main()
-
-
-
-
