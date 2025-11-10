@@ -518,9 +518,9 @@ def frame2_placeholder():
             st.metric("DCF EV", f"${dcf_result['EV_DCF']:.2f}")
         with result_col3:
             st.metric("EV Growth Expected", f"{dcf_result['growth_expected']:.2%}")
-            st.write("**DCF Parameters Used:**")
-            params_df = pd.DataFrame([dcf_result['params']])
-            st.dataframe(params_df, use_container_width=True)
+        st.write("**DCF Parameters Used:**")
+        params_df = pd.DataFrame([dcf_result['params']])
+        st.dataframe(params_df, use_container_width=True)
 
 def frame3_placeholder():
     """Frame 3: Placeholder for future development"""
@@ -813,6 +813,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
