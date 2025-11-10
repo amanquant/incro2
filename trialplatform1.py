@@ -7,11 +7,12 @@ from datetime import datetime
 
 COLUMNS_REQUIRED = [
     "company", "nace", "ebit", "employees", "net income", "capex", "d&a",
-    "changes in wc", "lt debt", "st debt", "sh equity", "capital equity", "cash", "category_code", "revenue", "companyID"
+    "changes in wc", "lt debt", "st debt", "sh equity", "capital equity", "cash", "category_code"
 ]
 
 COLUMNS_PORTFOLIO = ["company", "sector", "revenue", "employees"]
 
+# Financial statement line items to extract
 FINANCIAL_ITEMS = {
     'long_term_debt': 'Long term debt',
     'shareholders_funds': 'Shareholders funds',
@@ -20,6 +21,7 @@ FINANCIAL_ITEMS = {
     'ebitda': 'EBITDA'
 }
 
+# Predictability categories
 PREDICTABILITY_CATEGORIES = {
     "0": "Sell Side",
     "0,23": "Buy Side",
@@ -42,7 +44,7 @@ def validate_columns(df, file_type="Dataset", required_cols=None):
     return True
 
 def extract_date_columns(df):
-    """Extract date columns from dataframe"""
+    """Extract date columns from dataframe (date format like 31/12/2024)"""
     date_cols = []
     
     for col in df.columns:
@@ -108,7 +110,7 @@ def extract_financial_statement_data(df, date_cols):
         return data, f"Error extracting data: {str(e)}"
 
 def calculate_ratios_from_financial_statement(items_found):
-    """Calculate LTDE, EDAMARGIN, FX ratios"""
+    """Calculate LTDE, EDAMARGIN, FX ratios from extracted financial statement data"""
     metrics = {}
     
     try:
@@ -152,7 +154,7 @@ def get_company_category_code(company_name, dataset_df):
     return None
 
 def get_sector_percentiles(category_code, waccmap):
-    """Retrieve sector percentile ranges"""
+    """Retrieve sector percentile ranges for LTDE, EDAMARGIN, FX"""
     percentiles = {}
     
     category_data = waccmap[waccmap['category_code'].astype(str) == str(category_code)]
@@ -184,14 +186,14 @@ def get_sector_percentiles(category_code, waccmap):
             'p90': row.get('fx90th', np.nan)
         }
         
-        # Add nsellside for Frame 3
+        # Add nsellside for Frame 3 predictability
         percentiles['nsellside_p50'] = row.get('nsellside50th', np.nan)
         percentiles['nsellside'] = row.get('nsellside', np.nan)
     
     return percentiles
 
 def get_percentile_position(value, percentiles_dict):
-    """Calculate company's percentile position"""
+    """Calculate company's percentile position within sector range"""
     if np.isnan(value):
         return None, None, "N/A"
     
@@ -248,39 +250,35 @@ def display_metric_comparison(company_metrics, sector_percentiles, metric_name, 
     st.markdown("---")
 
 def get_ceo_age(company_row, contacts_df):
-    """Get CEO age from contacts file"""
+    """Get CEO age from contacts file via companyID"""
     if contacts_df is None:
         return None
     
-    # Get company ID from dataset
-    if 'companyID' not in company_row:
+    if 'companyID' not in company_row.index:
         return None
     
     company_id = company_row['companyID']
     
-    # Check if companyID column exists in contacts
     if 'companyID' not in contacts_df.columns:
         return None
     
-    # Find CEO for this company
     company_contacts = contacts_df[contacts_df['companyID'] == company_id]
     
     if company_contacts.empty:
         return None
     
-    # Look for CEO
     if 'CEO' in company_contacts.columns and 'age' in company_contacts.columns:
         ceo_row = company_contacts[company_contacts['CEO'].notna()]
         if not ceo_row.empty:
-            return ceo_row.iloc[0]['age']
+            try:
+                return float(ceo_row.iloc[0]['age'])
+            except:
+                return None
     
     return None
 
 def predictability_decision_tree(ev_growth, nsellside, nsellside_p50, ceo_age, revenue, edamargin, edamargin_p75):
-    """
-    Decision tree for predictability classification
-    Returns tuple: (leaf_value, category, path_taken)
-    """
+    """Decision tree for predictability classification"""
     path = []
     
     # Node 1: EV growth < 15%
@@ -310,6 +308,476 @@ def predictability_decision_tree(ev_growth, nsellside, nsellside_p50, ceo_age, r
     
     # Default: Undetected
     return "0,8", PREDICTABILITY_CATEGORIES["0,8"], path
+
+def nace_to_category(nace_code, nace_mapping=None):
+    """Convert NACE code to category code using mapping"""
+    if nace_mapping is None or nace_code not in nace_mapping.values:
+        return None
+    mapping_row = nace_mapping[nace_mapping['nace'] == nace_code]
+    return mapping_row['category_code'].iloc[0] if not mapping_row.empty else None
+
+def fuzzy_match_companies(portfolio_company, db_companies, threshold=80):
+    """Find similar companies in database using fuzzy matching"""
+    matches = process.extract(
+        portfolio_company,
+        db_companies['company'].tolist(),
+        scorer=fuzz.token_set_ratio,
+        limit=5
+    )
+    return [match for match in matches if match[1] >= threshold]
+
+def create_filtered_search(db, portfolio_df, nace_mapping):
+    """Create filtered search interface for deal matching"""
+    st.subheader("🔍 Search for Deals - Match Portfolio Companies")
+    
+    st.write(f"**Portfolio Companies to Match:** {len(portfolio_df)} companies")
+    
+    selected_portfolio_idx = st.selectbox(
+        "Select a portfolio company to match",
+        range(len(portfolio_df)),
+        format_func=lambda i: f"{portfolio_df.iloc[i]['company']} ({portfolio_df.iloc[i]['sector']})"
+    )
+    
+    portfolio_company = portfolio_df.iloc[selected_portfolio_idx]
+    
+    st.markdown("---")
+    st.write("**Portfolio Company Details:**")
+    port_col1, port_col2, port_col3 = st.columns(3)
+    with port_col1:
+        st.write(f"**Name:** {portfolio_company['company']}")
+        st.write(f"**Sector:** {portfolio_company['sector']}")
+    with port_col2:
+        st.write(f"**Revenue:** {portfolio_company['revenue']:,.2f}")
+    with port_col3:
+        st.write(f"**Employees:** {portfolio_company['employees']}")
+    
+    st.markdown("---")
+    st.subheader("Advanced Filters")
+    
+    filter_col1, filter_col2, filter_col3 = st.columns(3)
+    
+    with filter_col1:
+        revenue_range = st.slider(
+            "Revenue Range (M€)",
+            min_value=0.0,
+            max_value=float(db['revenue'].max()) if 'revenue' in db.columns else 1000.0,
+            value=(0.0, float(db['revenue'].max()) if 'revenue' in db.columns else 1000.0),
+            step=10.0
+        )
+    
+    with filter_col2:
+        employee_range = st.slider(
+            "Employee Range",
+            min_value=0,
+            max_value=int(db['employees'].max()) if 'employees' in db.columns else 10000,
+            value=(0, int(db['employees'].max()) if 'employees' in db.columns else 10000),
+            step=10
+        )
+    
+    with filter_col3:
+        sector_filter = st.multiselect(
+            "Filter by NACE Code",
+            options=sorted(db['nace'].unique()),
+            default=None
+        )
+    
+    filtered_db = db.copy()
+    
+    if 'revenue' in filtered_db.columns:
+        filtered_db = filtered_db[
+            (filtered_db['revenue'] >= revenue_range[0]) &
+            (filtered_db['revenue'] <= revenue_range[1])
+        ]
+    
+    if 'employees' in filtered_db.columns:
+        filtered_db = filtered_db[
+            (filtered_db['employees'] >= employee_range[0]) &
+            (filtered_db['employees'] <= employee_range[1])
+        ]
+    
+    if sector_filter:
+        filtered_db = filtered_db[filtered_db['nace'].isin(sector_filter)]
+    
+    st.write(f"**Matching Results:** {len(filtered_db)} companies found")
+    
+    if filtered_db.empty:
+        st.warning("No companies match the selected filters.")
+        return None
+    
+    st.subheader("Matched Companies")
+    
+    fuzzy_matches = fuzzy_match_companies(
+        portfolio_company['company'],
+        filtered_db,
+        threshold=60
+    )
+    
+    if fuzzy_matches:
+        st.write("**Fuzzy Name Matches:**")
+        for match_name, score in fuzzy_matches:
+            matched_row = filtered_db[filtered_db['company'] == match_name].iloc[0]
+            st.write(f"• {match_name} (Match Score: {score}%)")
+    
+    display_cols = ['company', 'nace', 'employees']
+    if 'revenue' in filtered_db.columns:
+        display_cols.insert(1, 'revenue')
+    
+    st.dataframe(
+        filtered_db[display_cols].head(20),
+        use_container_width=True,
+        height=300
+    )
+    
+    selected_match = st.selectbox(
+        "Select a company from filtered results for DCF analysis",
+        range(len(filtered_db)),
+        format_func=lambda i: f"{filtered_db.iloc[i]['company']} (Employees: {filtered_db.iloc[i]['employees']})"
+    )
+    
+    return filtered_db.iloc[selected_match]
+
+def frame1_analysis(dataset_df, waccmap, company_name, company_metrics, extraction_note, items_found):
+    """Frame 1: Analysis with metrics calculation and sector comparison"""
+    st.subheader("📊 Frame 1: Financial Metrics Analysis")
+    
+    category_code = get_company_category_code(company_name, dataset_df) if dataset_df is not None else None
+    
+    st.write(f"**Analysis for:** {company_name}")
+    st.write(f"**Data Source:** {extraction_note}")
+    if category_code:
+        st.write(f"**Category Code:** {category_code}")
+    else:
+        if dataset_df is not None:
+            st.warning(f"⚠️ Category code not found for {company_name} in dataset")
+    
+    st.markdown("---")
+    
+    st.subheader("📋 Extracted Financial Data")
+    
+    items_col1, items_col2 = st.columns(2)
+    with items_col1:
+        st.write("**Long-term Debt:**")
+        if not np.isnan(items_found.get('long_term_debt', np.nan)):
+            st.write(f"€ {items_found['long_term_debt']:,.2f}")
+        else:
+            st.write("N/A")
+        
+        st.write("**Shareholders Funds:**")
+        if not np.isnan(items_found.get('shareholders_funds', np.nan)):
+            st.write(f"€ {items_found['shareholders_funds']:,.2f}")
+        else:
+            st.write("N/A")
+    
+    with items_col2:
+        st.write("**Operating Revenue:**")
+        if not np.isnan(items_found.get('operating_revenue', np.nan)):
+            st.write(f"€ {items_found['operating_revenue']:,.2f}")
+        else:
+            st.write("N/A")
+        
+        st.write("**EBITDA:**")
+        if not np.isnan(items_found.get('ebitda', np.nan)):
+            st.write(f"€ {items_found['ebitda']:,.2f}")
+        else:
+            st.write("N/A")
+        
+        st.write("**Cost of Employees:**")
+        if not np.isnan(items_found.get('cost_of_employees', np.nan)):
+            st.write(f"€ {items_found['cost_of_employees']:,.2f}")
+        else:
+            st.write("N/A")
+    
+    st.markdown("---")
+    
+    if category_code and dataset_df is not None:
+        sector_percentiles = get_sector_percentiles(category_code, waccmap)
+        
+        st.subheader("📈 Company Metrics vs. Sector Benchmarks")
+        st.write(f"*Comparing against {category_code} sector (10th, 25th, 50th, 75th, 90th percentiles)*")
+        st.markdown("---")
+        
+        display_metric_comparison(company_metrics, sector_percentiles, 'ltde', 
+                                 'Metric 1: LTDE (Long-term Debt / Shareholders\' Funds)')
+        st.write("*Measures financial leverage - lower values indicate less debt relative to equity*")
+        st.markdown("---")
+        
+        display_metric_comparison(company_metrics, sector_percentiles, 'edamargin',
+                                 'Metric 2: EDAMARGIN (EBITDA / Operating Revenue)')
+        st.write("*Measures operational profitability - higher values indicate better operational efficiency*")
+        st.markdown("---")
+        
+        display_metric_comparison(company_metrics, sector_percentiles, 'fx',
+                                 'Metric 3: FX (Cost of Employees / Operating Revenue)')
+        st.write("*Measures labor cost intensity - lower values indicate lower employee costs relative to revenue*")
+        st.markdown("---")
+        
+        st.subheader("📊 Metrics Summary Table")
+        
+        summary_data = {
+            'Metric': ['LTDE', 'EDAMARGIN', 'FX'],
+            'Company Value': [
+                f"{company_metrics.get('ltde', np.nan):.4f}" if not np.isnan(company_metrics.get('ltde', np.nan)) else 'N/A',
+                f"{company_metrics.get('edamargin', np.nan):.4f}" if not np.isnan(company_metrics.get('edamargin', np.nan)) else 'N/A',
+                f"{company_metrics.get('fx', np.nan):.4f}" if not np.isnan(company_metrics.get('fx', np.nan)) else 'N/A'
+            ],
+            'P10': [
+                f"{sector_percentiles.get('ltde', {}).get('p10', np.nan):.4f}" if not np.isnan(sector_percentiles.get('ltde', {}).get('p10', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('edamargin', {}).get('p10', np.nan):.4f}" if not np.isnan(sector_percentiles.get('edamargin', {}).get('p10', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('fx', {}).get('p10', np.nan):.4f}" if not np.isnan(sector_percentiles.get('fx', {}).get('p10', np.nan)) else 'N/A'
+            ],
+            'P25': [
+                f"{sector_percentiles.get('ltde', {}).get('p25', np.nan):.4f}" if not np.isnan(sector_percentiles.get('ltde', {}).get('p25', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('edamargin', {}).get('p25', np.nan):.4f}" if not np.isnan(sector_percentiles.get('edamargin', {}).get('p25', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('fx', {}).get('p25', np.nan):.4f}" if not np.isnan(sector_percentiles.get('fx', {}).get('p25', np.nan)) else 'N/A'
+            ],
+            'P50 (Median)': [
+                f"{sector_percentiles.get('ltde', {}).get('p50', np.nan):.4f}" if not np.isnan(sector_percentiles.get('ltde', {}).get('p50', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('edamargin', {}).get('p50', np.nan):.4f}" if not np.isnan(sector_percentiles.get('edamargin', {}).get('p50', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('fx', {}).get('p50', np.nan):.4f}" if not np.isnan(sector_percentiles.get('fx', {}).get('p50', np.nan)) else 'N/A'
+            ],
+            'P75': [
+                f"{sector_percentiles.get('ltde', {}).get('p75', np.nan):.4f}" if not np.isnan(sector_percentiles.get('ltde', {}).get('p75', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('edamargin', {}).get('p75', np.nan):.4f}" if not np.isnan(sector_percentiles.get('edamargin', {}).get('p75', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('fx', {}).get('p75', np.nan):.4f}" if not np.isnan(sector_percentiles.get('fx', {}).get('p75', np.nan)) else 'N/A'
+            ],
+            'P90': [
+                f"{sector_percentiles.get('ltde', {}).get('p90', np.nan):.4f}" if not np.isnan(sector_percentiles.get('ltde', {}).get('p90', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('edamargin', {}).get('p90', np.nan):.4f}" if not np.isnan(sector_percentiles.get('edamargin', {}).get('p90', np.nan)) else 'N/A',
+                f"{sector_percentiles.get('fx', {}).get('p90', np.nan):.4f}" if not np.isnan(sector_percentiles.get('fx', {}).get('p90', np.nan)) else 'N/A'
+            ]
+        }
+        
+        summary_df = pd.DataFrame(summary_data)
+        st.dataframe(summary_df, use_container_width=True)
+    else:
+        st.warning("Cannot display sector benchmarks - category code not found for this company")
+
+def frame2_valuation(waccmap, company_row, company_metrics, items_found):
+    """Frame 2: DCF Valuation & Analysis"""
+    st.subheader("💰 Frame 2: Valuation")
+    
+    if company_row is None:
+        st.info("❌ Company dataset information not available")
+        return None
+    
+    dcf_result = DCF_automated(company_row, waccmap)
+    
+    st.write(f"**Company:** {company_row['company']}")
+    st.markdown("---")
+    
+    val_col1, val_col2, val_col3 = st.columns(3)
+    with val_col1:
+        st.metric("Current EV (€)", f"{dcf_result['EV_current']:,.2f}")
+    with val_col2:
+        st.metric("DCF EV (€)", f"{dcf_result['EV_DCF']:,.2f}")
+    with val_col3:
+        st.metric("EV Growth (%)", f"{dcf_result['growth_expected']:.2%}")
+    
+    st.markdown("---")
+    st.subheader("📋 DCF Parameters")
+    
+    param_col1, param_col2 = st.columns(2)
+    with param_col1:
+        st.write("**WACC:**")
+        st.write(f"• Re: {dcf_result['params'].get('re', 'N/A'):.4f}" if dcf_result['params'].get('re') else "• Re: N/A")
+        st.write(f"• Rd: {dcf_result['params'].get('rd', 'N/A'):.4f}" if dcf_result['params'].get('rd') else "• Rd: N/A")
+        st.write(f"• WACC: {dcf_result['params'].get('wacc', 'N/A'):.4f}" if dcf_result['params'].get('wacc') else "• WACC: N/A")
+    
+    with param_col2:
+        st.write("**Cash Flow:**")
+        st.write(f"• Growth: {dcf_result['params'].get('g', 'N/A'):.4f}" if dcf_result['params'].get('g') else "• Growth: N/A")
+        st.write(f"• FCF0: €{dcf_result['FCF0']:,.2f}" if not np.isnan(dcf_result['FCF0']) else "• FCF0: N/A")
+    
+    return dcf_result
+
+def frame3_predictability(dataset_df, waccmap, contacts_df, company_row, company_metrics, dcf_result):
+    """Frame 3: Predictability Analysis with Decision Tree"""
+    st.subheader("🎯 Frame 3: Predictable")
+    
+    if company_row is None or dcf_result is None:
+        st.warning("⚠️ Dataset and DCF analysis required")
+        return
+    
+    st.write(f"**Company:** {company_row['company']}")
+    st.markdown("---")
+    
+    # Extract required parameters
+    ev_growth = dcf_result['growth_expected']
+    revenue = company_row.get('revenue', np.nan)
+    edamargin = company_metrics.get('edamargin', np.nan)
+    
+    # Get sector data
+    category_code = company_row.get('category_code', None)
+    sector_percentiles = get_sector_percentiles(category_code, waccmap)
+    nsellside = sector_percentiles.get('nsellside', np.nan)
+    nsellside_p50 = sector_percentiles.get('nsellside_p50', np.nan)
+    edamargin_p75 = sector_percentiles.get('edamargin', {}).get('p75', np.nan)
+    
+    # Get CEO age
+    ceo_age = get_ceo_age(company_row, contacts_df)
+    
+    # Run decision tree
+    leaf_value, category, path = predictability_decision_tree(
+        ev_growth, nsellside, nsellside_p50, ceo_age, revenue, edamargin, edamargin_p75
+    )
+    
+    st.subheader("🌳 Decision Tree Analysis")
+    
+    st.write("**Input Parameters:**")
+    
+    input_col1, input_col2 = st.columns(2)
+    with input_col1:
+        st.write(f"• EV Growth: {ev_growth:.2%}")
+        st.write(f"• Revenue: €{revenue:,.0f}" if not np.isnan(revenue) else "• Revenue: N/A")
+        st.write(f"• EDAMARGIN: {edamargin:.4f}" if not np.isnan(edamargin) else "• EDAMARGIN: N/A")
+    
+    with input_col2:
+        st.write(f"• N Sell Side: {nsellside:.0f}" if not np.isnan(nsellside) else "• N Sell Side: N/A")
+        st.write(f"• CEO Age: {ceo_age:.0f}" if ceo_age is not None else "• CEO Age: N/A")
+        st.write(f"• EDAMARGIN P75: {edamargin_p75:.4f}" if not np.isnan(edamargin_p75) else "• EDAMARGIN P75: N/A")
+    
+    st.markdown("---")
+    
+    st.subheader("📍 Decision Path")
+    for i, step in enumerate(path, 1):
+        st.write(f"**Step {i}:** {step}")
+    
+    st.markdown("---")
+    
+    st.subheader("🎯 Classification Result")
+    
+    result_col1, result_col2 = st.columns(2)
+    with result_col1:
+        st.metric("Leaf Value", leaf_value)
+    with result_col2:
+        st.metric("Category", category)
+    
+    st.markdown("---")
+    st.info("""
+    **Sell Side:** Low growth (EV < 15%)
+    **Buy Side:** High growth, low sector activity
+    **Financing Opportunity:** High growth with specific characteristics
+    **Undetected:** High performing company
+    """)
+
+def frame4_placeholder():
+    """Frame 4: Placeholder for future development"""
+    st.subheader("📊 Frame 4: Contacts")
+    st.info("🚧 Frame 4 - Under Development")
+
+def show_search(df, waccmap, contacts_df):
+    """Display search interface and run analysis"""
+    st.subheader("🏢 Review Company - Evaluate Individual Company")
+    name_query = st.text_input("Search company name (case-insensitive, substring allowed)")
+    
+    if not name_query:
+        st.info("Enter a company name to search")
+        return
+    
+    filtered_df = df[df['company'].str.contains(name_query, case=False, na=False)]
+    
+    if filtered_df.empty:
+        st.warning(f"No companies found matching '{name_query}'")
+        return
+    
+    st.write(f"Found {len(filtered_df)} company(ies)")
+    
+    for i, r in filtered_df.iterrows():
+        st.markdown("---")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.write(f"**Company:** {r['company']}")
+            st.write(f"**NACE:** {r['nace']}")
+        with col2:
+            st.write(f"**Net Income:** {r['net income']:.2f}")
+            st.write(f"**Employees:** {r['employees']}")
+        with col3:
+            st.write(f"**EBIT:** {r['ebit']:.2f}")
+            st.write(f"**Category Code:** {r['category_code']}")
+        
+        if st.button(f"Run DCF Automated for {r['company']}", key=f"dcfbtn{i}"):
+            dcf_result = DCF_automated(r, waccmap)
+            
+            st.subheader("📊 DCF Automated Results")
+            
+            result_col1, result_col2, result_col3 = st.columns(3)
+            with result_col1:
+                st.metric("Current EV", f"${dcf_result['EV_current']:.2f}")
+            with result_col2:
+                st.metric("DCF EV", f"${dcf_result['EV_DCF']:.2f}")
+            with result_col3:
+                st.metric("EV Growth Expected", f"{dcf_result['growth_expected']:.2%}")
+            
+            st.write("**DCF Parameters Used:**")
+            params_df = pd.DataFrame([dcf_result['params']])
+            st.dataframe(params_df, use_container_width=True)
+        
+        st.markdown("---")
+        st.subheader("📈 Company Analysis Review")
+        
+        analysis_file = st.file_uploader(
+            f"Upload Financial Statement (XLSX) for {r['company']}",
+            type="xlsx",
+            key=f"analysis_upload_{i}",
+            help="Upload financial statement with Value column and date columns (format: 31/12/2024)"
+        )
+        
+        if analysis_file:
+            try:
+                df_analysis = pd.read_excel(analysis_file)
+                
+                st.info("📂 File structure detected:")
+                st.write(f"**Rows:** {len(df_analysis)}")
+                st.write(f"**Columns:** {list(df_analysis.columns)}")
+                
+                date_cols = extract_date_columns(df_analysis)
+                
+                if date_cols:
+                    st.write(f"**Date columns found:** {date_cols}")
+                    st.write(f"**Latest year:** {date_cols[0]}")
+                    
+                    items_found, extraction_note = extract_financial_statement_data(df_analysis, date_cols)
+                    
+                    if items_found:
+                        company_metrics = calculate_ratios_from_financial_statement(items_found)
+                        
+                        if company_metrics:
+                            dcf_result_tab = None
+                            
+                            tab1, tab2, tab3, tab4 = st.tabs(["Frame 1: FS analysis", "Frame 2: Valuation", "Frame 3: Predictable", "Frame 4: Contacts"])
+                            
+                            with tab1:
+                                frame1_analysis(df, waccmap, r['company'], company_metrics, extraction_note, items_found)
+                            
+                            with tab2:
+                                dcf_result_tab = frame2_valuation(waccmap, r, company_metrics, items_found)
+                            
+                            with tab3:
+                                if dcf_result_tab:
+                                    frame3_predictability(df, waccmap, contacts_df, r, company_metrics, dcf_result_tab)
+                                else:
+                                    st.warning("⚠️ Complete Frame 2 DCF analysis first")
+                            
+                            with tab4:
+                                frame4_placeholder()
+                        else:
+                            st.error("Could not calculate ratios from extracted data")
+                    else:
+                        st.warning("Could not extract financial statement items. Please check file format and item names.")
+                        st.write("**Looking for items:**")
+                        for key, item_name in FINANCIAL_ITEMS.items():
+                            st.write(f"• {item_name}")
+                else:
+                    st.error("No date columns found. Expected format: 31/12/2024, 31/12/2023, etc.")
+                    st.write(f"Available columns: {list(df_analysis.columns)}")
+            
+            except Exception as e:
+                st.error(f"Error loading analysis file: {str(e)}")
+                import traceback
+                st.write(traceback.format_exc())
+        else:
+            st.info("💡 Upload a financial statement file to analyze company metrics")
 
 def DCF_automated(company_row, waccmap, years=5):
     """Calculate DCF valuation for a company"""
@@ -361,288 +829,8 @@ def DCF_automated(company_row, waccmap, years=5):
         'years': years
     }
 
-def frame1_analysis(dataset_df, waccmap, company_name, company_metrics, extraction_note, items_found):
-    """Frame 1: Financial Statement Analysis"""
-    st.subheader("📊 Frame 1: Financial Metrics Analysis")
-    
-    category_code = get_company_category_code(company_name, dataset_df) if dataset_df is not None else None
-    
-    st.write(f"**Analysis for:** {company_name}")
-    st.write(f"**Data Source:** {extraction_note}")
-    if category_code:
-        st.write(f"**Category Code:** {category_code}")
-    
-    st.markdown("---")
-    
-    st.subheader("📋 Extracted Financial Data")
-    
-    items_col1, items_col2 = st.columns(2)
-    with items_col1:
-        st.write("**Long-term Debt:**")
-        st.write(f"€ {items_found['long_term_debt']:,.2f}" if not np.isnan(items_found.get('long_term_debt', np.nan)) else "N/A")
-        
-        st.write("**Shareholders Funds:**")
-        st.write(f"€ {items_found['shareholders_funds']:,.2f}" if not np.isnan(items_found.get('shareholders_funds', np.nan)) else "N/A")
-    
-    with items_col2:
-        st.write("**Operating Revenue:**")
-        st.write(f"€ {items_found['operating_revenue']:,.2f}" if not np.isnan(items_found.get('operating_revenue', np.nan)) else "N/A")
-        
-        st.write("**EBITDA:**")
-        st.write(f"€ {items_found['ebitda']:,.2f}" if not np.isnan(items_found.get('ebitda', np.nan)) else "N/A")
-        
-        st.write("**Cost of Employees:**")
-        st.write(f"€ {items_found['cost_of_employees']:,.2f}" if not np.isnan(items_found.get('cost_of_employees', np.nan)) else "N/A")
-    
-    st.markdown("---")
-    
-    if category_code and dataset_df is not None:
-        sector_percentiles = get_sector_percentiles(category_code, waccmap)
-        
-        st.subheader("📈 Company Metrics vs. Sector Benchmarks")
-        
-        display_metric_comparison(company_metrics, sector_percentiles, 'ltde', 'Metric 1: LTDE')
-        display_metric_comparison(company_metrics, sector_percentiles, 'edamargin', 'Metric 2: EDAMARGIN')
-        display_metric_comparison(company_metrics, sector_percentiles, 'fx', 'Metric 3: FX')
-    else:
-        st.info("📊 Sector benchmarks will display when dataset is uploaded")
-
-def frame2_valuation(waccmap, company_row, company_metrics, items_found):
-    """Frame 2: DCF Valuation Analysis"""
-    st.subheader("💰 Frame 2: DCF Valuation & Analysis")
-    
-    if company_row is None:
-        st.info("❌ Company dataset required")
-        return
-    
-    dcf_result = DCF_automated(company_row, waccmap)
-    
-    st.write(f"**Company:** {company_row['company']}")
-    st.markdown("---")
-    
-    val_col1, val_col2, val_col3 = st.columns(3)
-    with val_col1:
-        st.metric("Current EV (€)", f"{dcf_result['EV_current']:,.2f}")
-    with val_col2:
-        st.metric("DCF EV (€)", f"{dcf_result['EV_DCF']:,.2f}")
-    with val_col3:
-        st.metric("EV Growth (%)", f"{dcf_result['growth_expected']:.2%}")
-    
-    st.markdown("---")
-    
-    st.subheader("📋 DCF Parameters")
-    
-    param_col1, param_col2 = st.columns(2)
-    with param_col1:
-        st.write("**WACC:**")
-        st.write(f"• Re: {dcf_result['params'].get('re', 'N/A'):.4f}" if dcf_result['params'].get('re') else "• Re: N/A")
-        st.write(f"• Rd: {dcf_result['params'].get('rd', 'N/A'):.4f}" if dcf_result['params'].get('rd') else "• Rd: N/A")
-        st.write(f"• WACC: {dcf_result['params'].get('wacc', 'N/A'):.4f}" if dcf_result['params'].get('wacc') else "• WACC: N/A")
-    
-    with param_col2:
-        st.write("**Cash Flow:**")
-        st.write(f"• Growth: {dcf_result['params'].get('g', 'N/A'):.4f}" if dcf_result['params'].get('g') else "• Growth: N/A")
-        st.write(f"• FCF0: €{dcf_result['FCF0']:,.2f}" if not np.isnan(dcf_result['FCF0']) else "• FCF0: N/A")
-    
-    st.markdown("---")
-    
-    st.subheader("📈 5-Year Projection")
-    
-    fcf_data = {
-        'Year': list(range(1, dcf_result['years'] + 1)),
-        'FCF (€)': [f"{fcf:,.2f}" for fcf in dcf_result['FCFs']],
-        'Discounted FCF (€)': [f"{dfcf:,.2f}" for dfcf in dcf_result['discounted_FCFs']]
-    }
-    
-    st.dataframe(pd.DataFrame(fcf_data), use_container_width=True)
-    
-    return dcf_result
-
-def frame3_predictability(dataset_df, waccmap, contacts_df, company_row, company_metrics, dcf_result):
-    """Frame 3: Predictability Analysis with Decision Tree"""
-    st.subheader("🎯 Frame 3: Predictability Classification")
-    
-    if company_row is None or dcf_result is None:
-        st.warning("⚠️ Dataset and DCF required")
-        return
-    
-    st.write(f"**Company:** {company_row['company']}")
-    st.markdown("---")
-    
-    # Extract required parameters
-    ev_growth = dcf_result['growth_expected']
-    revenue = company_row.get('revenue', np.nan)
-    edamargin = company_metrics.get('edamargin', np.nan)
-    
-    # Get sector data
-    category_code = company_row.get('category_code', None)
-    sector_percentiles = get_sector_percentiles(category_code, waccmap)
-    nsellside = sector_percentiles.get('nsellside', np.nan)
-    nsellside_p50 = sector_percentiles.get('nsellside_p50', np.nan)
-    edamargin_p75 = sector_percentiles.get('edamargin', {}).get('p75', np.nan)
-    
-    # Get CEO age
-    ceo_age = get_ceo_age(company_row, contacts_df)
-    
-    # Run decision tree
-    leaf_value, category, path = predictability_decision_tree(
-        ev_growth, nsellside, nsellside_p50, ceo_age, revenue, edamargin, edamargin_p75
-    )
-    
-    st.subheader("🌳 Decision Tree Analysis")
-    
-    # Display input parameters
-    st.write("**Input Parameters:**")
-    
-    input_col1, input_col2 = st.columns(2)
-    with input_col1:
-        st.write(f"• EV Growth: {ev_growth:.2%}")
-        st.write(f"• Revenue: €{revenue:,.0f}" if not np.isnan(revenue) else "• Revenue: N/A")
-        st.write(f"• EDAMARGIN: {edamargin:.4f}" if not np.isnan(edamargin) else "• EDAMARGIN: N/A")
-    
-    with input_col2:
-        st.write(f"• N Sell Side: {nsellside:.0f}" if not np.isnan(nsellside) else "• N Sell Side: N/A")
-        st.write(f"• CEO Age: {ceo_age:.0f}" if ceo_age is not None else "• CEO Age: N/A")
-        st.write(f"• EDAMARGIN P75: {edamargin_p75:.4f}" if not np.isnan(edamargin_p75) else "• EDAMARGIN P75: N/A")
-    
-    st.markdown("---")
-    
-    # Display decision path
-    st.subheader("📍 Decision Path")
-    for i, step in enumerate(path, 1):
-        st.write(f"**Step {i}:** {step}")
-    
-    st.markdown("---")
-    
-    # Display result
-    st.subheader("🎯 Classification Result")
-    
-    result_col1, result_col2 = st.columns(2)
-    with result_col1:
-        st.metric("Leaf Value", leaf_value)
-    with result_col2:
-        st.metric("Category", category)
-    
-    # Category explanation
-    st.markdown("---")
-    st.info("""
-    **Sell Side:** Low growth (EV < 15%)
-    **Buy Side:** High growth, low sector activity
-    **Financing Opportunity:** High growth with specific characteristics
-    **Undetected:** High performing company
-    """)
-
-def frame4_placeholder():
-    """Frame 4: Contacts"""
-    st.subheader("📊 Frame 4: Contacts")
-    st.info("🚧 Under Development")
-
-def show_standalone_frames():
-    """Display frames standalone"""
-    st.subheader("📈 Company Analysis (Pre-Dataset)")
-    st.info("💡 Upload financial statement for Frame 1")
-    
-    analysis_file = st.file_uploader("Upload Financial Statement (XLSX)", type="xlsx", key="standalone")
-    
-    if analysis_file:
-        try:
-            df_analysis = pd.read_excel(analysis_file)
-            date_cols = extract_date_columns(df_analysis)
-            
-            if date_cols:
-                items_found, extraction_note = extract_financial_statement_data(df_analysis, date_cols)
-                
-                if items_found:
-                    company_metrics = calculate_ratios_from_financial_statement(items_found)
-                    
-                    if company_metrics:
-                        company_name = st.text_input("Company name:", value="Company")
-                        
-                        tab1, tab2, tab3, tab4 = st.tabs(["Frame 1", "Frame 2", "Frame 3", "Frame 4"])
-                        
-                        with tab1:
-                            frame1_analysis(None, None, company_name, company_metrics, extraction_note, items_found)
-                        
-                        with tab2:
-                            st.warning("⚠️ Dataset required")
-                        
-                        with tab3:
-                            st.warning("⚠️ Dataset, WACC, Contacts required")
-                        
-                        with tab4:
-                            frame4_placeholder()
-        
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
-
-def show_search(df, waccmap, contacts_df):
-    """Display search interface"""
-    st.subheader("🏢 Review Company")
-    name_query = st.text_input("Search company")
-    
-    if not name_query:
-        st.info("Enter company name")
-        return
-    
-    filtered_df = df[df['company'].str.contains(name_query, case=False, na=False)]
-    
-    if filtered_df.empty:
-        st.warning(f"No companies found")
-        return
-    
-    st.write(f"Found {len(filtered_df)} company(ies)")
-    
-    for i, r in filtered_df.iterrows():
-        st.markdown("---")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write(f"**Company:** {r['company']}")
-            st.write(f"**Revenue:** €{r['revenue']:,.0f}")
-        with col2:
-            st.write(f"**Category:** {r['category_code']}")
-            st.write(f"**Employees:** {r['employees']}")
-        
-        st.markdown("---")
-        
-        analysis_file = st.file_uploader(f"Upload FS for {r['company']}", type="xlsx", key=f"analysis_{i}")
-        
-        if analysis_file:
-            try:
-                df_analysis = pd.read_excel(analysis_file)
-                date_cols = extract_date_columns(df_analysis)
-                
-                if date_cols:
-                    items_found, extraction_note = extract_financial_statement_data(df_analysis, date_cols)
-                    
-                    if items_found:
-                        company_metrics = calculate_ratios_from_financial_statement(items_found)
-                        
-                        if company_metrics:
-                            tab1, tab2, tab3, tab4 = st.tabs(["Frame 1", "Frame 2", "Frame 3", "Frame 4"])
-                            
-                            dcf_result = None
-                            
-                            with tab1:
-                                frame1_analysis(df, waccmap, r['company'], company_metrics, extraction_note, items_found)
-                            
-                            with tab2:
-                                dcf_result = frame2_valuation(waccmap, r, company_metrics, items_found)
-                            
-                            with tab3:
-                                if dcf_result:
-                                    frame3_predictability(df, waccmap, contacts_df, r, company_metrics, dcf_result)
-                                else:
-                                    st.warning("⚠️ Complete Frame 2 first")
-                            
-                            with tab4:
-                                frame4_placeholder()
-            
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
-
 def main():
-    st.set_page_config(page_title="Incrolink Agent", layout="wide")
+    st.set_page_config(page_title="Incrolink Agent", layout="wide", initial_sidebar_state="expanded")
     
     st.title("Incrolink Agent")
     try:
@@ -655,32 +843,131 @@ def main():
     
     st.sidebar.header("📁 Data Configuration")
     
-    dataset_file = st.sidebar.file_uploader("Dataset (XLSX)", type="xlsx", key="dataset")
-    wacc_file = st.sidebar.file_uploader("WACC Map (XLSX)", type="xlsx", key="wacc")
-    contacts_file = st.sidebar.file_uploader("Contacts (XLSX) - Optional", type="xlsx", key="contacts")
+    dataset_file = st.sidebar.file_uploader(
+        "Upload Dataset (XLSX)",
+        type="xlsx",
+        key="dataset_uploader",
+        help="Upload the company dataset with all required columns"
+    )
+    
+    wacc_file = st.sidebar.file_uploader(
+        "Upload WACC Map (XLSX)",
+        type="xlsx",
+        key="wacc_uploader",
+        help="Upload the WACC parameters mapped by category code"
+    )
+    
+    portfolio_file = st.sidebar.file_uploader(
+        "Upload Portfolio (XLSX) - Optional",
+        type="xlsx",
+        key="portfolio_uploader",
+        help="Upload portfolio companies for deal matching (optional)"
+    )
+    
+    contacts_file = st.sidebar.file_uploader(
+        "Upload Contacts (XLSX) - Optional",
+        type="xlsx",
+        key="contacts_uploader",
+        help="Upload contacts file with CEO age information for predictability analysis (optional)"
+    )
     
     contacts_df = None
     if contacts_file:
         try:
             contacts_df = pd.read_excel(contacts_file)
-            st.sidebar.success("✅ Contacts loaded")
+            st.sidebar.success("✅ Contacts file loaded")
         except:
-            st.sidebar.error("❌ Contacts error")
+            st.sidebar.error("❌ Error loading contacts file")
     
-    if not dataset_file or not wacc_file:
-        st.info("📊 Early Mode: Upload FS for Frame 1")
-        show_standalone_frames()
-    else:
+    if dataset_file and wacc_file:
         try:
             df = pd.read_excel(dataset_file)
             waccmap = pd.read_excel(wacc_file)
             
             if validate_columns(df, "Dataset"):
-                st.sidebar.metric("Companies", len(df))
-                show_search(df, waccmap, contacts_df)
-        
+                st.sidebar.metric("Companies Loaded", len(df))
+                st.sidebar.metric("Categories", df['category_code'].nunique())
+                
+                st.markdown("---")
+                
+                st.subheader("🎯 Select Workflow Mode")
+                
+                workflow_mode = st.radio(
+                    "Choose your analysis mode:",
+                    options=["Review Company", "Search for Deals"],
+                    horizontal=True,
+                    help="Review Company: Evaluate individual companies | Search for Deals: Match portfolio companies"
+                )
+                
+                st.markdown("---")
+                
+                if workflow_mode == "Review Company":
+                    show_search(df, waccmap, contacts_df)
+                
+                elif workflow_mode == "Search for Deals":
+                    if portfolio_file is None:
+                        st.warning("⚠️ Portfolio file is required for deal matching. Please upload it in the sidebar.")
+                    else:
+                        try:
+                            portfolio_df = pd.read_excel(portfolio_file)
+                            if validate_columns(portfolio_df, "Portfolio", COLUMNS_PORTFOLIO):
+                                st.sidebar.metric("Portfolio Companies", len(portfolio_df))
+                                
+                                selected_company = create_filtered_search(df, portfolio_df, None)
+                                
+                                if selected_company is not None:
+                                    st.markdown("---")
+                                    if st.button("Run DCF Analysis on Selected Match"):
+                                        dcf_result = DCF_automated(selected_company, waccmap)
+                                        
+                                        st.subheader("📊 DCF Valuation Results")
+                                        
+                                        result_col1, result_col2, result_col3 = st.columns(3)
+                                        with result_col1:
+                                            st.metric("Current EV", f"${dcf_result['EV_current']:.2f}")
+                                        with result_col2:
+                                            st.metric("DCF EV", f"${dcf_result['EV_DCF']:.2f}")
+                                        with result_col3:
+                                            st.metric("EV Growth Expected", f"{dcf_result['growth_expected']:.2%}")
+                                        
+                                        st.write("**DCF Parameters Used:**")
+                                        params_df = pd.DataFrame([dcf_result['params']])
+                                        st.dataframe(params_df, use_container_width=True)
+                        except Exception as e:
+                            st.error(f"Error loading portfolio file: {str(e)}")
+            else:
+                st.stop()
+                
         except Exception as e:
-            st.error(f"Error: {str(e)}")
+            st.error(f"Error loading files: {str(e)}")
+    else:
+        st.info("👈 Please upload both the Dataset and WACC Map files in the sidebar to proceed.")
+        
+        with st.expander("📋 Required Columns Reference"):
+            st.write("**Dataset must include:**")
+            for col in COLUMNS_REQUIRED:
+                st.text(f"• {col}")
+            
+            st.write("**Portfolio file (optional) must include:**")
+            for col in COLUMNS_PORTFOLIO:
+                st.text(f"• {col}")
+            
+            st.write("**Financial Statement file format:**")
+            st.write("Column Headers: Value | 31/12/2024 | 31/12/2023 | 31/12/2022 | ...")
+            st.write("")
+            st.write("**Required row items:**")
+            for key, item_name in FINANCIAL_ITEMS.items():
+                st.text(f"• {item_name}")
+            
+            st.write("**WACC file must include percentile columns:**")
+            st.write("• ltde10th, ltde25th, ltde50th, ltde75th, ltde90th")
+            st.write("• edamarg10th, edamarg25th, edamarg50th, edamarg75th, edamarg90th")
+            st.write("• fx10th, fx25th, fx50th, fx75th, fx90th")
+            st.write("• nsellside, nsellside50th (for Frame 3 predictability)")
+            
+            st.write("**Contacts file (optional) format:**")
+            st.write("• companyID, CEO, age (for CEO age lookup in predictability analysis)")
 
 if __name__ == "__main__":
     main()
+
