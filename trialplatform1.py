@@ -23,12 +23,12 @@ FINANCIAL_ITEMS = {
 
 # Predictability categories
 PREDICTABILITY_CATEGORIES = {
-    "0": "Sell Side",
-    "0,23": "Buy Side",
-    "0,43": "Financing Opportunity",
-    "0,54": "Financing Opportunity",
-    "0,65": "Financing Opportunity",
-    "0,8": "Undetected"
+    "0": "low growth",
+    "0,23": "good growth, low sell side operations",
+    "0,43": "good financials and sector conditions, but Management too young",
+    "0,54": "good company and sector conditions, but revenue is too small",
+    "0,65": "optimal conditions, but margins are weak",
+    "0,8": "optimal conditions"
 }
 
 def validate_columns(df, file_type="Dataset", required_cols=None):
@@ -970,5 +970,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
