@@ -510,18 +510,18 @@ def frame2_placeholder():
     st.subheader("📊 Frame 2: Valuation")
     for r in filtered_df.iterrows():
         if st.button(f"Run DCF Automated for {r['company']}", key=f"dcfbtn{i}"):
-        dcf_result = DCF_automated(r, waccmap)
-        st.subheader("📊 DCF Automated Results")
-        result_col1, result_col2, result_col3 = st.columns(3)
-        with result_col1:
-            st.metric("Current EV", f"${dcf_result['EV_current']:.2f}")
-        with result_col2:
-            st.metric("DCF EV", f"${dcf_result['EV_DCF']:.2f}")
-        with result_col3:
-            st.metric("EV Growth Expected", f"{dcf_result['growth_expected']:.2%}")
-        st.write("**DCF Parameters Used:**")
-        params_df = pd.DataFrame([dcf_result['params']])
-        st.dataframe(params_df, use_container_width=True)
+            dcf_result = DCF_automated(r, waccmap)
+            st.subheader("📊 DCF Automated Results")
+            result_col1, result_col2, result_col3 = st.columns(3)
+            with result_col1:
+                st.metric("Current EV", f"${dcf_result['EV_current']:.2f}")
+            with result_col2:
+                st.metric("DCF EV", f"${dcf_result['EV_DCF']:.2f}")
+            with result_col3:
+                st.metric("EV Growth Expected", f"{dcf_result['growth_expected']:.2%}")
+            st.write("**DCF Parameters Used:**")
+            params_df = pd.DataFrame([dcf_result['params']])
+            st.dataframe(params_df, use_container_width=True)
 
 def frame3_placeholder():
     """Frame 3: Placeholder for future development"""
@@ -814,6 +814,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
