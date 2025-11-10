@@ -317,7 +317,7 @@ def get_related_contacts(contact_id, contacts_df):
     if 'contactID' not in contacts_df.columns or 'relative' not in contacts_df.columns:
         return None
     
-    related = contacts_df[contacts_df['relative'] == contact_id]
+    related = contacts_df[contacts_df['contactIDrelative'] == contact_id]
     return related if not related.empty else None
 
 def predictability_decision_tree(ev_growth, nsellside, nsellside_p50, ceo_age, revenue, edamargin, edamargin_p75):
@@ -1221,4 +1221,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
