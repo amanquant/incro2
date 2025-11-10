@@ -508,7 +508,23 @@ def frame1_analysis(dataset_df, waccmap, company_name, company_metrics, extracti
 def frame2_placeholder():
     """Frame 2: Placeholder for future development"""
     st.subheader("📊 Frame 2: Valuation")
-    st.info("🚧 Frame 2 - Under Development")
+            # DCF Analysis button
+        if st.button(f"Run DCF Automated for {r['company']}", key=f"dcfbtn{i}"):
+            dcf_result = DCF_automated(r, waccmap)
+            
+            st.subheader("📊 DCF Automated Results")
+            
+            result_col1, result_col2, result_col3 = st.columns(3)
+            with result_col1:
+                st.metric("Current EV", f"${dcf_result['EV_current']:.2f}")
+            with result_col2:
+                st.metric("DCF EV", f"${dcf_result['EV_DCF']:.2f}")
+            with result_col3:
+                st.metric("EV Growth Expected", f"{dcf_result['growth_expected']:.2%}")
+            
+            st.write("**DCF Parameters Used:**")
+            params_df = pd.DataFrame([dcf_result['params']])
+            st.dataframe(params_df, use_container_width=True)
 
 def frame3_placeholder():
     """Frame 3: Placeholder for future development"""
@@ -552,25 +568,7 @@ def show_search(df, waccmap):
         with col3:
             st.write(f"**EBIT:** {r['ebit']:.2f}")
             st.write(f"**Category Code:** {r['category_code']}")
-        
-        # DCF Analysis button
-        if st.button(f"Run DCF Automated for {r['company']}", key=f"dcfbtn{i}"):
-            dcf_result = DCF_automated(r, waccmap)
             
-            st.subheader("📊 DCF Automated Results")
-            
-            result_col1, result_col2, result_col3 = st.columns(3)
-            with result_col1:
-                st.metric("Current EV", f"${dcf_result['EV_current']:.2f}")
-            with result_col2:
-                st.metric("DCF EV", f"${dcf_result['EV_DCF']:.2f}")
-            with result_col3:
-                st.metric("EV Growth Expected", f"{dcf_result['growth_expected']:.2%}")
-            
-            st.write("**DCF Parameters Used:**")
-            params_df = pd.DataFrame([dcf_result['params']])
-            st.dataframe(params_df, use_container_width=True)
-        
         # Three-frame analysis section
         st.markdown("---")
         st.subheader("📈 Company Analysis Review")
@@ -819,6 +817,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
