@@ -1203,7 +1203,7 @@ def main():
         except Exception as e:
             st.error(f"Error loading files: {str(e)}")
     else:
-        st.info("👈 Please upload both the Dataset and WACC Map files in the sidebar to proceed.")
+        st.info("👈 Please upload your data files in the sidebar to proceed.")
         
         with st.expander("📋 Required Columns Reference"):
             st.write("**Dataset must include:**")
@@ -1232,6 +1232,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
