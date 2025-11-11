@@ -1083,11 +1083,21 @@ def DCF_automated(company_row, waccmap, years=5):
     }
 
 def main():
+    st.markdown("""
+    <style>
+        [data-testid=stSidebar] {
+            background-color: #ffffff;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+with st.sidebar:
+    "## This is the sidebar"
     st.set_page_config(page_title="Incrolink Agent", layout="wide", initial_sidebar_state="expanded")
     
     st.title("Incrolink Agent")
     try:
-        st.logo("logoincrolink1.png", size="medium", icon_image="logoincrolink1.png")
+        st.logo("logoincrolink2.png", size="medium", icon_image="logoincrolink2.png")
     except:
         pass
     
@@ -1222,4 +1232,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
