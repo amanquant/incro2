@@ -1097,7 +1097,7 @@ def main():
     
     st.title("Incrolink Agent")
     try:
-        st.logo("logoincrolink2.png", size="medium", icon_image="logoincrolink2.png")
+        st.logo("iconincro.png", size="medium", icon_image="iconincro.png")
     except:
         pass
     
@@ -1232,6 +1232,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
