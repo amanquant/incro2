@@ -1090,9 +1090,6 @@ def main():
         }
     </style>
     """, unsafe_allow_html=True)
-
-with st.sidebar:
-    "## This is the sidebar"
     st.set_page_config(page_title="Incrolink Agent", layout="wide", initial_sidebar_state="expanded")
     
     st.title("Incrolink Agent")
@@ -1232,5 +1229,6 @@ with st.sidebar:
 
 if __name__ == "__main__":
     main()
+
 
 
