@@ -1087,6 +1087,9 @@ def main():
     <style>
         [data-testid=stSidebar] {
             background-color: #ffffff;
+            shadow {
+             box-shadow:5px 5px 10px 2px rgb (0 0 0 / 0.8);
+             }
         }
     </style>
     """, unsafe_allow_html=True)
@@ -1229,6 +1232,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
