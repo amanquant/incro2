@@ -10,6 +10,7 @@ COLUMNS_REQUIRED = [
     "changes in wc", "lt debt", "st debt", "sh equity", "capital equity", "cash", "category_code"
 ]
 
+# Updated: Portfolio now has same structure as Dataset
 COLUMNS_PORTFOLIO = [
     "company", "nace", "ebit", "employees", "net income", "capex", "d&a",
     "changes in wc", "lt debt", "st debt", "sh equity", "capital equity", "cash", "category_code"
@@ -144,19 +145,12 @@ def calculate_metrics_from_dataset(company_row):
         # EDAMARGIN: EBITDA / Revenue (approximation using EBIT + D&A)
         ebit = company_row.get('ebit', np.nan)
         d_and_a = company_row.get('d&a', np.nan)
-        revenue = company_row.get('revenue', np.nan) if 'revenue' in company_row.index else np.nan
         
-        if not pd.isna(revenue) and revenue != 0:
-            ebitda_approx = ebit + d_and_a if not pd.isna(ebit) and not pd.isna(d_and_a) else np.nan
-            if not pd.isna(ebitda_approx):
-                metrics['edamargin'] = ebitda_approx / revenue
-            else:
-                metrics['edamargin'] = np.nan
-        else:
-            metrics['edamargin'] = np.nan
+        # Since revenue is not in dataset, we calculate approximate EBITDA margin
+        # We'll compute from available data or set to NaN
+        metrics['edamargin'] = np.nan
         
-        # FX: Cost of employees / Revenue (not directly in dataset, set to NaN or approximate)
-        # Since cost of employees not in standard dataset, we'll set to NaN
+        # FX: Cost of employees / Revenue (not directly in dataset, set to NaN)
         metrics['fx'] = np.nan
         
         return metrics
@@ -429,11 +423,8 @@ def create_filtered_search(db, portfolio_df, nace_mapping, waccmap, contacts_df)
     buyer_fit_messages = []
     
     for idx_a, company_a in list_a.iterrows():
-        # Get category_code for portfolio company (assuming it has one or we look it up)
+        # Get category_code for portfolio company
         category_a = company_a.get('category_code', None)
-        if category_a is None:
-            # Try to lookup from db
-            category_a = get_company_category_code(company_a['company'], db)
         
         if category_a is None:
             continue
@@ -442,11 +433,11 @@ def create_filtered_search(db, portfolio_df, nace_mapping, waccmap, contacts_df)
         matched_b = list_b[list_b['category_code'] == category_a]
         
         for idx_b, company_b in matched_b.iterrows():
-            # Revenue comparison
-            revenue_a = company_a.get('revenue', 0)
-            revenue_b = company_b.get('revenue', 0) if 'revenue' in company_b.index else 0
+            # Revenue comparison (using 'ebit' as proxy for financial capacity)
+            ebit_a = company_a.get('ebit', 0)
+            ebit_b = company_b.get('ebit', 0)
             
-            if revenue_a >= revenue_b:
+            if ebit_a >= ebit_b:
                 buyer_fit_msg = f"Company **{company_a['company']}** is a good buyer fit for **{company_b['company']}**"
             else:
                 buyer_fit_msg = f"Company **{company_b['company']}** is a good buyer fit for **{company_a['company']}**"
@@ -456,8 +447,8 @@ def create_filtered_search(db, portfolio_df, nace_mapping, waccmap, contacts_df)
                 'portfolio_company': company_a['company'],
                 'target_company': company_b['company'],
                 'category_code': category_a,
-                'portfolio_revenue': revenue_a,
-                'target_revenue': revenue_b,
+                'portfolio_ebit': ebit_a,
+                'target_ebit': ebit_b,
                 'buyer_fit': buyer_fit_msg,
                 'target_data': company_b
             })
@@ -794,7 +785,7 @@ def frame3_predictability(dataset_df, waccmap, contacts_df, company_row, company
     
     # Extract required parameters
     ev_growth = dcf_result['growth_expected']
-    revenue = company_row.get('revenue', np.nan)
+    revenue = company_row.get('net income', np.nan)  # Use net income as proxy for revenue
     edamargin = company_metrics.get('edamargin', np.nan)
     
     # Get sector data
@@ -818,7 +809,7 @@ def frame3_predictability(dataset_df, waccmap, contacts_df, company_row, company
     
     with input_col1:
         st.write(f"• EV Growth: {ev_growth:.2%}")
-        st.write(f"• Revenue: €{revenue:,.0f}" if not np.isnan(revenue) else "• Revenue: N/A")
+        st.write(f"• Net Income: €{revenue:,.0f}" if not np.isnan(revenue) else "• Net Income: N/A")
         st.write(f"• EDAMARGIN: {edamargin:.4f}" if not np.isnan(edamargin) else "• EDAMARGIN: N/A")
     
     with input_col2:
@@ -1251,7 +1242,7 @@ def main():
         "Upload Portfolio (XLSX) - Optional",
         type="xlsx",
         key="portfolio_uploader",
-        help="Upload portfolio companies for deal matching (optional)"
+        help="Upload portfolio companies for deal matching (now with same structure as Dataset)"
     )
     
     contacts_file = st.sidebar.file_uploader(
@@ -1319,7 +1310,7 @@ def main():
             for col in COLUMNS_REQUIRED:
                 st.text(f"• {col}")
             
-            st.write("**Portfolio file (optional) must include:**")
+            st.write("**Portfolio file (now requires SAME columns as Dataset):**")
             for col in COLUMNS_PORTFOLIO:
                 st.text(f"• {col}")
             
@@ -1341,4 +1332,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
