@@ -10,7 +10,10 @@ COLUMNS_REQUIRED = [
     "changes in wc", "lt debt", "st debt", "sh equity", "capital equity", "cash", "category_code"
 ]
 
-COLUMNS_PORTFOLIO = ["company", "sector", "revenue", "employees"]
+COLUMNS_PORTFOLIO = [
+    "company", "nace", "ebit", "employees", "net income", "capex", "d&a",
+    "changes in wc", "lt debt", "st debt", "sh equity", "capital equity", "cash", "category_code"
+]
 
 # Financial statement line items to extract
 FINANCIAL_ITEMS = {
@@ -1338,3 +1341,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
