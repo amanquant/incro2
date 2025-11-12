@@ -40,7 +40,7 @@ def validate_columns(df, file_type="Dataset", required_cols=None):
     if missing_cols:
         st.error(f"❌ {file_type} - Missing required columns: {', '.join(missing_cols)}")
         return False
-    st.success(f"✅ {file_type} - All required columns present")
+    st.success(f"✅ {file_type} uploaded")
     return True
 
 def extract_date_columns(df):
@@ -1232,6 +1232,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
