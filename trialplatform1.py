@@ -522,10 +522,9 @@ def show_search(db, waccmap, contacts_df):
 # MAIN APPLICATION
 # ============================================================================
 def main():
-    st.set_page_config(page_title="Financial Intelligence Platform", layout="wide")
+    st.set_page_config(page_title="Incrolink", layout="wide")
     
-    st.title("💼 Financial Intelligence Platform")
-    st.markdown("*Automated financial analysis, valuation, and deal matching*")
+    st.title("Hey, you're back at it!")
     
     st.markdown("---")
     
@@ -640,3 +639,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
