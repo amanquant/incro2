@@ -9,9 +9,10 @@ import pathlib
 # ============================================================================
 # CUSTOM STYLING - Modern Design with White Sidebar & Shadow
 # ============================================================================
-def load_style(file_path):
+def load_css(file_path):
     with open(file_path) as f:
         st.html(f"<style>{f.read()}</style>")
+        
 css_path= pathlib.Path("style.css")
 load_css(css_path)
     
@@ -1349,6 +1350,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
