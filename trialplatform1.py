@@ -5,28 +5,42 @@ from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
 from datetime import datetime
 import pathlib
-import requests
-from io import BytesIO
-import openpyxl
+import io
+import os
+from contextlib import closing
+import dropbox
 
 # ============================================================================
 # CUSTOM STYLING - Modern Design with White Sidebar & Shadow
 # ============================================================================
 def load_css(file_path):
-    with open(file_path) as f:
-        st.html(f"<style>{f.read()}</style>")
+    try:
+        with open(file_path) as f:
+            st.html(f"<style>{f.read()}</style>")
+    except FileNotFoundError:
+        st.warning(f"CSS file not found: {file_path}")
 
 css_path = pathlib.Path("style.css")
 load_css(css_path)
 
 # ============================================================================
-# DROPBOX URL CONFIGURATION - Embedded Data Sources
+# DROPBOX API CONFIGURATION
 # ============================================================================
-DROPBOX_URLS = {
-    'financial_statements': 'https://www.dropbox.com/scl/fi/2f955nt6zbclfwz3nnz60/volkfs.xlsx?rlkey=0pln5j0rpxmk0542158w75nov&st=euznhfrn&dl=1',
-    'dataset': 'https://www.dropbox.com/scl/fi/xp7lqxzym0ddwyjx1adeh/datasetincro1.xlsx?rlkey=a1zrwfo2d1mvi9got93wtj3zy&st=pd8cfono&dl=1',
-    'portfolio': 'https://www.dropbox.com/scl/fi/ifa8h5qv593pd9x8q67l2/db.xlsx?rlkey=pux8db90ltdhfyb3gtbrto3zx&st=45s8uk9k&dl=1',
-    'wacc': 'https://www.dropbox.com/scl/fi/x2u50g51sa8xuvf2ibjpg/wacc.xlsx?rlkey=sau1mzibsh7ndy6uwx76rvj2m&st=7eyj1pah&dl=1'
+# Try to get token from Streamlit secrets (production) or environment variable (local)
+try:
+    DROPBOX_TOKEN = st.secrets.get("dropbox_token", os.getenv("DROPBOX_TOKEN", None))
+except:
+    DROPBOX_TOKEN = os.getenv("DROPBOX_TOKEN", None)
+
+if not DROPBOX_TOKEN:
+    st.warning("⚠️ Dropbox token not configured. Please set DROPBOX_TOKEN in secrets or environment.")
+
+# Dropbox file paths (not URLs)
+DROPBOX_PATHS = {
+    'financial_statements': '/volkfs.xlsx',
+    'dataset': '/datasetincro1.xlsx',
+    'portfolio': '/db.xlsx',
+    'wacc': '/wacc.xlsx'
 }
 
 # ============================================================================
@@ -60,39 +74,56 @@ PREDICTABILITY_CATEGORIES = {
 }
 
 # ============================================================================
-# AUTO-LOAD FUNCTIONS - DROPBOX DATA INTEGRATION (FIXED)
+# DROPBOX API FUNCTIONS - OPTIMIZED WITH BETTER ERROR HANDLING
 # ============================================================================
-def convert_dropbox_url(url):
-    """Convert Dropbox share link to direct download link"""
-    if '?dl=0' in url:
-        return url.replace('?dl=0', '?dl=1')
-    if '&dl=0' in url:
-        return url.replace('&dl=0', '&dl=1')
-    return url + '?dl=1' if '?dl=' not in url else url
-
-def load_file_from_dropbox(dropbox_url):
-    """Load Excel file directly from Dropbox URL with proper engine specification"""
+def initialize_dropbox():
+    """Initialize Dropbox client"""
+    if not DROPBOX_TOKEN:
+        return None
     try:
-        url = convert_dropbox_url(dropbox_url)
+        dbx = dropbox.Dropbox(DROPBOX_TOKEN)
+        # Test the connection
+        dbx.users_get_current_account()
+        return dbx
+    except dropbox.exceptions.AuthError as e:
+        st.error(f"❌ Dropbox authentication failed: Invalid token")
+        return None
+    except Exception as e:
+        st.error(f"❌ Dropbox connection error: {str(e)}")
+        return None
+
+def stream_dropbox_file(dropbox_path):
+    """
+    Stream a file directly from Dropbox using the Dropbox API.
+    
+    Args:
+        dropbox_path (str): Path to file in Dropbox (e.g., '/folder/file.xlsx')
+    
+    Returns:
+        pandas.DataFrame or None: DataFrame if successful, None otherwise
+    """
+    try:
+        dbx = initialize_dropbox()
+        if dbx is None:
+            return None
         
-        # Fetch the file content from Dropbox
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
+        # Download file from Dropbox
+        _, res = dbx.files_download(dropbox_path)
         
-        # Get the content as bytes
-        file_content = response.content
-        
-        # Create a BytesIO object from the content
-        excel_file = BytesIO(file_content)
-        
-        # Read Excel file with explicit engine specification
-        # This handles both .xlsx and .xls files properly
-        df = pd.read_excel(excel_file, engine='openpyxl')
-        
-        return df
-        
-    except requests.exceptions.RequestException as e:
-        st.error(f"❌ Network error loading file from Dropbox: {str(e)}")
+        # Use closing context manager to properly handle response
+        with closing(res) as result:
+            byte_data = result.content
+            
+            # Create BytesIO stream
+            file_stream = io.BytesIO(byte_data)
+            
+            # Read Excel file with explicit engine
+            df = pd.read_excel(file_stream, engine='openpyxl')
+            
+            return df
+            
+    except dropbox.exceptions.ApiError as e:
+        st.error(f"❌ Dropbox API error: {str(e)}")
         return None
     except ValueError as e:
         st.error(f"❌ File format error: {str(e)}")
@@ -102,13 +133,13 @@ def load_file_from_dropbox(dropbox_url):
         return None
 
 def load_all_data_from_dropbox():
-    """Load all data files from Dropbox URLs with comprehensive error handling"""
+    """Load all data files from Dropbox using the API"""
     with st.spinner("🔄 Loading data from Dropbox..."):
         data_dict = {}
         
         # Load Dataset
         st.write("📂 Loading Dataset...")
-        dataset_df = load_file_from_dropbox(DROPBOX_URLS['dataset'])
+        dataset_df = stream_dropbox_file(DROPBOX_PATHS['dataset'])
         if dataset_df is not None:
             st.success("✅ Dataset loaded successfully")
             data_dict['dataset'] = dataset_df
@@ -118,7 +149,7 @@ def load_all_data_from_dropbox():
         
         # Load WACC
         st.write("📂 Loading WACC File...")
-        wacc_df = load_file_from_dropbox(DROPBOX_URLS['wacc'])
+        wacc_df = stream_dropbox_file(DROPBOX_PATHS['wacc'])
         if wacc_df is not None:
             st.success("✅ WACC file loaded successfully")
             data_dict['wacc'] = wacc_df
@@ -126,9 +157,9 @@ def load_all_data_from_dropbox():
             st.error("❌ Failed to load WACC")
             return None
         
-        # Load Portfolio
+        # Load Portfolio (optional)
         st.write("📂 Loading Portfolio...")
-        portfolio_df = load_file_from_dropbox(DROPBOX_URLS['portfolio'])
+        portfolio_df = stream_dropbox_file(DROPBOX_PATHS['portfolio'])
         if portfolio_df is not None:
             st.success("✅ Portfolio loaded successfully")
             data_dict['portfolio'] = portfolio_df
@@ -138,7 +169,7 @@ def load_all_data_from_dropbox():
         
         # Load Financial Statements (optional)
         st.write("📂 Loading Financial Statements...")
-        fs_df = load_file_from_dropbox(DROPBOX_URLS['financial_statements'])
+        fs_df = stream_dropbox_file(DROPBOX_PATHS['financial_statements'])
         if fs_df is not None:
             st.success("✅ Financial Statements loaded successfully")
             data_dict['financial_statements'] = fs_df
@@ -337,31 +368,6 @@ def get_percentile_position(value, percentiles_dict):
     
     return position, rank, f"{p10:.4f} | {p25:.4f} | {p50:.4f} | {p75:.4f} | {p90:.4f}"
 
-def display_metric_comparison(company_metrics, sector_percentiles, metric_name, metric_label):
-    """Display metric with sector percentile comparison"""
-    company_value = company_metrics.get(metric_name, np.nan)
-    percentiles = sector_percentiles.get(metric_name, {})
-    
-    st.write(f"**{metric_label}**")
-    
-    if not np.isnan(company_value):
-        position, rank, percentile_range = get_percentile_position(company_value, percentiles)
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("Company Value", f"{company_value:.4f}")
-        with col2:
-            st.metric("Sector Position", rank)
-        with col3:
-            st.metric("Percentile Range", position)
-        
-        st.write("**Sector Distribution (P10 | P25 | P50 | P75 | P90):**")
-        st.write(percentile_range)
-    else:
-        st.metric(metric_label, "N/A")
-    
-    st.markdown("---")
-
 def get_ceo_age(company_row, contacts_df):
     """Get CEO age from contacts file via companyID"""
     if contacts_df is None:
@@ -386,34 +392,6 @@ def get_ceo_age(company_row, contacts_df):
                 return None
     
     return None
-
-def get_contacts_by_company_id(company_id, contacts_df):
-    """Get all contacts for a company by companyID"""
-    if contacts_df is None:
-        return None
-    if 'companyID' not in contacts_df.columns:
-        return None
-    
-    company_contacts = contacts_df[contacts_df['companyID'] == company_id]
-    return company_contacts if not company_contacts.empty else None
-
-def get_contact_by_id(contact_id, contacts_df):
-    """Get specific contact by contactID"""
-    if contacts_df is None or 'contactID' not in contacts_df.columns:
-        return None
-    
-    contact = contacts_df[contacts_df['contactID'] == contact_id]
-    return contact.iloc[0] if not contact.empty else None
-
-def get_related_contacts_by_relative(contact_id, contacts_df):
-    """Get contacts that have relationship with given contact via 'relative' column"""
-    if contacts_df is None:
-        return None
-    if 'contactID' not in contacts_df.columns or 'relative' not in contacts_df.columns:
-        return None
-    
-    related = contacts_df[contacts_df['relative'] == contact_id]
-    return related if not related.empty else None
 
 def predictability_decision_tree(ev_growth, nsellside, nsellside_p50, ceo_age, revenue, edamargin, edamargin_p75):
     """Decision tree for predictability classification"""
@@ -440,24 +418,6 @@ def predictability_decision_tree(ev_growth, nsellside, nsellside_p50, ceo_age, r
         return "0,65", PREDICTABILITY_CATEGORIES["0,65"], path
     
     return "0,8", PREDICTABILITY_CATEGORIES["0,8"], path
-
-def nace_to_category(nace_code, nace_mapping=None):
-    """Convert NACE code to category code using mapping"""
-    if nace_mapping is None or nace_code not in nace_mapping.values:
-        return None
-    
-    mapping_row = nace_mapping[nace_mapping['nace'] == nace_code]
-    return mapping_row['category_code'].iloc[0] if not mapping_row.empty else None
-
-def fuzzy_match_companies(portfolio_company, db_companies, threshold=80):
-    """Find similar companies in database using fuzzy matching"""
-    matches = process.extract(
-        portfolio_company,
-        db_companies['company'].tolist(),
-        scorer=fuzz.token_set_ratio,
-        limit=5
-    )
-    return [match for match in matches if match[1] >= threshold]
 
 def DCF_automated(company_row, waccmap):
     """Automated DCF Valuation"""
@@ -510,9 +470,6 @@ def DCF_automated(company_row, waccmap):
             'params': {'re': 0.08, 'rd': 0.04, 'wacc': 0.08, 'g': 0.03}
         }
 
-# ============================================================================
-# DISPLAY FUNCTIONS
-# ============================================================================
 def show_search(db, waccmap, contacts_df):
     """Show company search interface"""
     st.subheader("🔍 Search Companies")
@@ -522,9 +479,10 @@ def show_search(db, waccmap, contacts_df):
 # MAIN APPLICATION
 # ============================================================================
 def main():
-    st.set_page_config(page_title="Incrolink", layout="wide")
+    st.set_page_config(page_title="Financial Intelligence Platform", layout="wide")
     
-    st.title("Hey, you're back at it!")
+    st.title("💼 Financial Intelligence Platform")
+    st.markdown("*Automated financial analysis, valuation, and deal matching*")
     
     st.markdown("---")
     
@@ -539,15 +497,19 @@ def main():
     
     # Check if auto-load was triggered
     if st.session_state.get('auto_load', False):
-        data_dict = load_all_data_from_dropbox()
-        
-        if data_dict:
-            st.session_state.dataset_df = data_dict.get('dataset')
-            st.session_state.waccmap = data_dict.get('wacc')
-            st.session_state.portfolio_df = data_dict.get('portfolio')
-            st.session_state.fs_df = data_dict.get('financial_statements')
-            st.session_state.auto_load = False  # Reset flag
+        if DROPBOX_TOKEN:
+            data_dict = load_all_data_from_dropbox()
+            
+            if data_dict:
+                st.session_state.dataset_df = data_dict.get('dataset')
+                st.session_state.waccmap = data_dict.get('wacc')
+                st.session_state.portfolio_df = data_dict.get('portfolio')
+                st.session_state.fs_df = data_dict.get('financial_statements')
+                st.session_state.auto_load = False  # Reset flag
+            else:
+                st.stop()
         else:
+            st.error("❌ Dropbox token not configured. Cannot auto-load data.")
             st.stop()
     
     # Manual Upload Section (Backup)
@@ -639,4 +601,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
