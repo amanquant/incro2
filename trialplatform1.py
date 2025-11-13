@@ -495,15 +495,14 @@ def main():
     
     # Check if auto-load was triggered
     if st.session_state.get('auto_load', False):
-        if DROPBOX_TOKEN:
             data_dict = load_all_data_from_dropbox()
-            
             if data_dict:
                 st.session_state.dataset_df = data_dict.get('dataset')
                 st.session_state.waccmap = data_dict.get('wacc')
                 st.session_state.portfolio_df = data_dict.get('portfolio')
                 st.session_state.fs_df = data_dict.get('financial_statements')
                 st.session_state.auto_load = False  # Reset flag
+                st.experimental_rerun()
         else:
             st.error("❌ Dropbox token not configured. Cannot auto-load data.")
             st.stop()
@@ -597,5 +596,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
