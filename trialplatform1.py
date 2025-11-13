@@ -13,7 +13,7 @@ def apply_custom_styling():
     custom_css = ""
     <style>
     [data-testid="stAppViewContainer"] {
-        background: linear-gradient(135.5deg, #f5f7fa 0%, #c3cfe2 100%);
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
     }
 
     [data-testid="stSidebar"] {
@@ -1599,6 +1599,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
