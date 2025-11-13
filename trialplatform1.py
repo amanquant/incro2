@@ -504,8 +504,6 @@ def main():
                 st.session_state.portfolio_df = data_dict.get('portfolio')
                 st.session_state.fs_df = data_dict.get('financial_statements')
                 st.session_state.auto_load = False  # Reset flag
-            else:
-                st.stop()
         else:
             st.error("❌ Dropbox token not configured. Cannot auto-load data.")
             st.stop()
@@ -599,4 +597,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
