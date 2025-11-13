@@ -63,13 +63,13 @@ h4 {
 
 /* Button Styling - Modern */
 button {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-    color: white !important;
+    background: white;
+    color: #283593 !important;
     border: none !important;
     border-radius: 8px !important;
     padding: 0.75rem 1.5rem !important;
     font-weight: 600 !important;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4) !important;
+    box-shadow: 0 1px 5px rgb(0 20 109 / 20%) !important;
     transition: all 0.3s ease !important;
 }
 
@@ -249,4 +249,5 @@ hr {
         margin: 1rem !important;
         padding: 1rem !important;
     }
+
 }
