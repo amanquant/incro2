@@ -503,9 +503,9 @@ def main():
                 st.session_state.fs_df = data_dict.get('financial_statements')
                 st.session_state.auto_load = False  # Reset flag
                 st.experimental_rerun()
-        else:
-            st.error("❌ Dropbox token not configured. Cannot auto-load data.")
-            st.stop()
+            else:
+                st.error("❌ Dropbox token not configured. Cannot auto-load data.")
+                st.stop()
     
     # Manual Upload Section (Backup)
     with st.sidebar:
@@ -596,6 +596,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
