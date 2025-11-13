@@ -3,3 +3,7 @@ pandas
 fuzzywuzzy 
 python-Levenshtein 
 openpyxl
+numpy
+requests
+dropbox
+python-dotenv
