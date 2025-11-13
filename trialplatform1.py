@@ -12,9 +12,8 @@ def apply_custom_styling():
     """Apply modern design with white sidebar, shadows, and improved typography"""
     custom_css = ""
     <style>
-    /* Main Container & Layout */
     [data-testid="stAppViewContainer"] {
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        background: linear-gradient(#f5f7fa 0%, #c3cfe2 100%);
     }
 
     /* Sidebar - White with Shadow */
@@ -1601,6 +1600,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
