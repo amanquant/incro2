@@ -7,6 +7,7 @@ from datetime import datetime
 import pathlib
 import requests
 from io import BytesIO
+import openpyxl
 
 # ============================================================================
 # CUSTOM STYLING - Modern Design with White Sidebar & Shadow
@@ -59,7 +60,7 @@ PREDICTABILITY_CATEGORIES = {
 }
 
 # ============================================================================
-# AUTO-LOAD FUNCTIONS - DROPBOX DATA INTEGRATION
+# AUTO-LOAD FUNCTIONS - DROPBOX DATA INTEGRATION (FIXED)
 # ============================================================================
 def convert_dropbox_url(url):
     """Convert Dropbox share link to direct download link"""
@@ -70,19 +71,38 @@ def convert_dropbox_url(url):
     return url + '?dl=1' if '?dl=' not in url else url
 
 def load_file_from_dropbox(dropbox_url):
-    """Load Excel file directly from Dropbox URL"""
+    """Load Excel file directly from Dropbox URL with proper engine specification"""
     try:
         url = convert_dropbox_url(dropbox_url)
+        
+        # Fetch the file content from Dropbox
         response = requests.get(url, timeout=30)
         response.raise_for_status()
-        excel_file = BytesIO(response.content)
-        return pd.read_excel(excel_file)
+        
+        # Get the content as bytes
+        file_content = response.content
+        
+        # Create a BytesIO object from the content
+        excel_file = BytesIO(file_content)
+        
+        # Read Excel file with explicit engine specification
+        # This handles both .xlsx and .xls files properly
+        df = pd.read_excel(excel_file, engine='openpyxl')
+        
+        return df
+        
+    except requests.exceptions.RequestException as e:
+        st.error(f"❌ Network error loading file from Dropbox: {str(e)}")
+        return None
+    except ValueError as e:
+        st.error(f"❌ File format error: {str(e)}")
+        return None
     except Exception as e:
-        st.error(f"Error loading file from Dropbox: {str(e)}")
+        st.error(f"❌ Error loading file from Dropbox: {str(e)}")
         return None
 
 def load_all_data_from_dropbox():
-    """Load all data files from Dropbox URLs"""
+    """Load all data files from Dropbox URLs with comprehensive error handling"""
     with st.spinner("🔄 Loading data from Dropbox..."):
         data_dict = {}
         
@@ -440,7 +460,7 @@ def fuzzy_match_companies(portfolio_company, db_companies, threshold=80):
     return [match for match in matches if match[1] >= threshold]
 
 def DCF_automated(company_row, waccmap):
-    """Automated DCF Valuation (PLACEHOLDER - Unchanged Logic)"""
+    """Automated DCF Valuation"""
     try:
         category_code = company_row.get('category_code')
         category_data = waccmap[waccmap['category_code'].astype(str) == str(category_code)]
@@ -491,10 +511,10 @@ def DCF_automated(company_row, waccmap):
         }
 
 # ============================================================================
-# DISPLAY FUNCTIONS (FRAMES 1-4)
+# DISPLAY FUNCTIONS
 # ============================================================================
 def show_search(db, waccmap, contacts_df):
-    """Show company search interface (PLACEHOLDER - can be extended)"""
+    """Show company search interface"""
     st.subheader("🔍 Search Companies")
     st.write("Enter company details to search")
 
@@ -502,9 +522,10 @@ def show_search(db, waccmap, contacts_df):
 # MAIN APPLICATION
 # ============================================================================
 def main():
-    st.set_page_config(page_title="Incrolink", layout="wide")
+    st.set_page_config(page_title="Financial Intelligence Platform", layout="wide")
     
-    st.title("Back at it!")
+    st.title("💼 Financial Intelligence Platform")
+    st.markdown("*Automated financial analysis, valuation, and deal matching*")
     
     st.markdown("---")
     
@@ -512,7 +533,7 @@ def main():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        if st.button("🚀 let's dat-it-up!", key="auto_load_btn", use_container_width=True):
+        if st.button("🚀 let's data this up!", key="auto_load_btn", use_container_width=True):
             st.session_state.auto_load = True
     
     st.markdown("---")
@@ -572,12 +593,12 @@ def main():
             )
             
             if dataset_file and wacc_file:
-                st.session_state.dataset_df = pd.read_excel(dataset_file)
-                st.session_state.waccmap = pd.read_excel(wacc_file)
-                st.session_state.portfolio_df = pd.read_excel(portfolio_file) if portfolio_file else None
+                st.session_state.dataset_df = pd.read_excel(dataset_file, engine='openpyxl')
+                st.session_state.waccmap = pd.read_excel(wacc_file, engine='openpyxl')
+                st.session_state.portfolio_df = pd.read_excel(portfolio_file, engine='openpyxl') if portfolio_file else None
             
             if contacts_file:
-                st.session_state.contacts_df = pd.read_excel(contacts_file)
+                st.session_state.contacts_df = pd.read_excel(contacts_file, engine='openpyxl')
     
     # Main Application Logic
     dataset_df = st.session_state.get('dataset_df')
@@ -619,25 +640,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
