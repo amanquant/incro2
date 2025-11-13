@@ -12,8 +12,8 @@ def load_style(file_path):
     with open(file_path) as f:
         st.html(f"<style>{f.read()}</style>")
     
-    #custom_css = pathlib.Path("style.css")
-    #st.markdown(custom_css, unsafe_allow_html=True)
+custom_css = pathlib.Path("style.css")
+load_css(custom_css)
     
 
 # ============================================================================
@@ -1349,6 +1349,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
