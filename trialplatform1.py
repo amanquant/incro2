@@ -10,7 +10,7 @@ from datetime import datetime
 # ============================================================================
 def apply_custom_styling():
     """Apply modern design with white sidebar, shadows, and improved typography"""
-    custom_css = ""
+    custom_css = """
     <style>
     [data-testid="stAppViewContainer"] {
         background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
@@ -264,6 +264,7 @@ def apply_custom_styling():
         }
     }
     </style>
+    """
     st.markdown(custom_css, unsafe_allow_html=True)
 
 # ============================================================================
@@ -1599,6 +1600,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
