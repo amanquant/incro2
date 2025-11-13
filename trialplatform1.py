@@ -14,7 +14,7 @@ def load_style(file_path):
         st.html(f"<style>{f.read()}</style>")
     
 custom_css = pathlib.Path("style.css")
-loadcss(custom_css)
+load_css(custom_css)
     
 
 # ============================================================================
@@ -1350,6 +1350,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
