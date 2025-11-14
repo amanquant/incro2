@@ -1422,7 +1422,6 @@ def main():
                 st.session_state.financial_statements = data_dict.get('financial_statements')
                 st.session_state.contacts_df = data_dict.get('contacts')
                 st.session_state.auto_load = False  # Reset flag
-                st.experimental_rerun()  # Trigger immediate refresh
             else:
                 st.stop()
         else:
@@ -1533,3 +1532,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
