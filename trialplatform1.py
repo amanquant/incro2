@@ -1324,7 +1324,7 @@ def show_search(df, waccmap, contacts_df):
         st.markdown("---")
         st.subheader("📈 Company Analysis Review")
         
-        analysis_file = load_all_data_from_dropbox(fs_df)
+        analysis_file = DROPBOX_PATHS['financial_statements']
         
         if analysis_file:
             try:
@@ -1548,6 +1548,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
