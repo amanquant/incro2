@@ -29,7 +29,6 @@ load_css(css_path)
 # DROPBOX API CONFIGURATION
 # ============================================================================
 # Try to get token from Streamlit secrets (production) or environment variable (local)
-
 try:
     DROPBOX_TOKEN = st.secrets.get("dropbox_token", os.getenv("DROPBOX_TOKEN", None))
 except:
@@ -43,7 +42,8 @@ DROPBOX_PATHS = {
     'financial_statements': '/volkfs.xlsx',
     'dataset': '/datasetincro1.xlsx',
     'portfolio': '/db.xlsx',
-    'wacc': '/wacc.xlsx'
+    'wacc': '/wacc.xlsx',
+    'contacts': '/contacts.xlsx'
 }
 
 # ============================================================================
@@ -179,6 +179,16 @@ def load_all_data_from_dropbox():
         else:
             st.warning("⚠️ Financial Statements not loaded (optional)")
             data_dict['financial_statements'] = None
+        
+        # Load Contacts (optional)
+        st.write("📂 Loading Contacts...")
+        contacts_df = stream_dropbox_file(DROPBOX_PATHS['contacts'])
+        if contacts_df is not None:
+            st.success("✅ Contacts loaded successfully")
+            data_dict['contacts'] = contacts_df
+        else:
+            st.warning("⚠️ Contacts not loaded (optional)")
+            data_dict['contacts'] = None
     
     return data_dict
 
@@ -1207,26 +1217,17 @@ def create_filtered_search(db, portfolio_df, nace_mapping, waccmap, contacts_df)
     
     st.markdown("---")
     
-    # Ask for financial statement upload for detailed analysis
-    st.write("**Upload Financial Statement for In-Depth Analysis:**")
+    # Load financial statements from Dropbox
+    fs_df = st.session_state.get('financial_statements')
     
-    analysis_file = st.file_uploader(
-        f"Upload Financial Statement (XLSX) for {selected_result['target_company']}",
-        type="xlsx",
-        key="detailed_analysis_upload",
-        help="Upload financial statement with Value column and date columns (format: 31/12/2024)"
-    )
-    
-    if analysis_file:
+    if fs_df is not None:
+        st.write("**Using Financial Statements from Dropbox**")
         try:
-            df_analysis = pd.read_excel(analysis_file)
-            st.info("📂 File uploaded successfully")
-            
-            date_cols = extract_date_columns(df_analysis)
+            date_cols = extract_date_columns(fs_df)
             if date_cols:
                 st.write(f"**Latest year:** {date_cols[0]}")
                 
-                items_found, extraction_note = extract_financial_statement_data(df_analysis, date_cols)
+                items_found, extraction_note = extract_financial_statement_data(fs_df, date_cols)
                 
                 if items_found:
                     company_metrics = calculate_ratios_from_financial_statement(items_found)
@@ -1259,12 +1260,11 @@ def create_filtered_search(db, portfolio_df, nace_mapping, waccmap, contacts_df)
                 else:
                     st.warning("Could not extract financial statement items")
             else:
-                st.error("No date columns found")
-        
+                st.error("No date columns found in financial statements")
         except Exception as e:
-            st.error(f"Error loading analysis file: {str(e)}")
+            st.error(f"Error processing financial statements: {str(e)}")
     else:
-        st.info("💡 Upload a financial statement file to run complete analysis")
+        st.warning("⚠️ Financial Statements not available")
     
     return selected_result
 
@@ -1324,18 +1324,18 @@ def show_search(df, waccmap, contacts_df):
         st.markdown("---")
         st.subheader("📈 Company Analysis Review")
         
-        analysis_file = DROPBOX_PATHS['financial_statements']
+        # Load financial statements from Dropbox
+        fs_df = st.session_state.get('financial_statements')
         
-        if analysis_file:
+        if fs_df is not None:
             try:
-                df_analysis = pd.read_excel(analysis_file)
-                st.info("📂 File structure detected:")
+                st.info("📂 Using Financial Statements from Dropbox")
                 
-                date_cols = extract_date_columns(df_analysis)
+                date_cols = extract_date_columns(fs_df)
                 if date_cols:
                     st.write(f"**Latest year:** {date_cols[0]}")
                     
-                    items_found, extraction_note = extract_financial_statement_data(df_analysis, date_cols)
+                    items_found, extraction_note = extract_financial_statement_data(fs_df, date_cols)
                     
                     if items_found:
                         company_metrics = calculate_ratios_from_financial_statement(items_found)
@@ -1374,14 +1374,14 @@ def show_search(df, waccmap, contacts_df):
                             st.write(f"• {item_name}")
                 else:
                     st.error("No date columns found. Expected format: 31/12/2024, 31/12/2023, etc.")
-                    st.write(f"Available columns: {list(df_analysis.columns)}")
+                    st.write(f"Available columns: {list(fs_df.columns)}")
             
             except Exception as e:
                 st.error(f"Error loading analysis file: {str(e)}")
                 import traceback
                 st.write(traceback.format_exc())
         else:
-            st.info("💡 Upload a financial statement file to analyze company metrics")
+            st.info("⚠️ Financial Statements not loaded. Data from Dropbox will be used automatically.")
 
 # ============================================================================
 # MAIN APPLICATION
@@ -1419,61 +1419,46 @@ def main():
                 st.session_state.dataset_df = data_dict.get('dataset')
                 st.session_state.waccmap = data_dict.get('wacc')
                 st.session_state.portfolio_df = data_dict.get('portfolio')
-                st.session_state.fs_df = data_dict.get('financial_statements')
+                st.session_state.financial_statements = data_dict.get('financial_statements')
+                st.session_state.contacts_df = data_dict.get('contacts')
                 st.session_state.auto_load = False  # Reset flag
+                st.experimental_rerun()  # Trigger immediate refresh
             else:
                 st.stop()
         else:
             st.error("❌ Dropbox token not configured. Cannot auto-load data.")
             st.stop()
     
-    # Sidebar Data Configuration
+    # Sidebar Data Configuration (for manual override only)
     st.sidebar.header("📁 Data Configuration")
     
     dataset_file = st.sidebar.file_uploader(
-        "Upload Dataset (XLSX)",
+        "Upload Dataset (XLSX) - Optional Override",
         type="xlsx",
         key="dataset_uploader",
-        help="Upload the company dataset with all required columns"
+        help="Upload the company dataset with all required columns (optional - use Dropbox auto-load by default)"
     )
     
     wacc_file = st.sidebar.file_uploader(
-        "Upload WACC Map (XLSX)",
+        "Upload WACC Map (XLSX) - Optional Override",
         type="xlsx",
         key="wacc_uploader",
-        help="Upload the WACC parameters mapped by category code"
+        help="Upload the WACC parameters mapped by category code (optional - use Dropbox auto-load by default)"
     )
     
     portfolio_file = st.sidebar.file_uploader(
-        "Upload Portfolio (XLSX) - Optional",
+        "Upload Portfolio (XLSX) - Optional Override",
         type="xlsx",
         key="portfolio_uploader",
-        help="Upload portfolio companies for deal matching (now with same structure as Dataset)"
+        help="Upload portfolio companies for deal matching (optional)"
     )
     
-    contacts_file = st.sidebar.file_uploader(
-        "Upload Contacts (XLSX) - Optional",
-        type="xlsx",
-        key="contacts_uploader",
-        help="Upload contacts file with companyID, contactID, name, role, linkedin, mobile, email, relative columns (optional)"
-    )
-    
-    contacts_df = None
-    if contacts_file:
-        try:
-            contacts_df = pd.read_excel(contacts_file)
-            st.sidebar.success("✅ Contacts file loaded")
-        except:
-            st.sidebar.error("❌ Error loading contacts file")
-    
-    # Manual upload handling
+    # Manual upload handling (overrides Dropbox data if provided)
     if dataset_file and wacc_file:
         st.session_state.dataset_df = pd.read_excel(dataset_file, engine='openpyxl')
         st.session_state.waccmap = pd.read_excel(wacc_file, engine='openpyxl')
         if portfolio_file:
             st.session_state.portfolio_df = pd.read_excel(portfolio_file, engine='openpyxl')
-        if contacts_file:
-            st.session_state.contacts_df = pd.read_excel(contacts_file, engine='openpyxl')
     
     # Main Application Logic
     dataset_df = st.session_state.get('dataset_df')
@@ -1518,7 +1503,7 @@ def main():
             st.error(f"Error loading files: {str(e)}")
     
     else:
-        st.info("👈 Click the 'let's data this up!' button to auto-load data from Dropbox, or upload files manually in the sidebar.")
+        st.info("👈 Click the 'let's data this up!' button to auto-load all data from Dropbox (Dataset, WACC, Portfolio, Financial Statements, and Contacts).")
     
     # Help Section
     with st.expander("📋 Required Columns Reference"):
@@ -1530,7 +1515,7 @@ def main():
         for col in COLUMNS_PORTFOLIO:
             st.text(f"• {col}")
         
-        st.write("**Financial Statement file format:**")
+        st.write("**Financial Statement file format (loaded from Dropbox):**")
         st.write("Column Headers: Value | 31/12/2024 | 31/12/2023 | 31/12/2022 | ...")
         st.write("")
         st.write("**Required row items:**")
@@ -1543,16 +1528,8 @@ def main():
         st.write("• fx10th, fx25th, fx50th, fx75th, fx90th")
         st.write("• nsellside, nsellside50th (for Frame 3 predictability)")
         
-        st.write("**Contacts file (optional) format:**")
+        st.write("**Contacts file (loaded from Dropbox) format:**")
         st.write("• companyID, contactID, name, role, linkedin, mobile, email, relative")
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
