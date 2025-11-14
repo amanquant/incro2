@@ -1324,12 +1324,7 @@ def show_search(df, waccmap, contacts_df):
         st.markdown("---")
         st.subheader("📈 Company Analysis Review")
         
-        analysis_file = st.file_uploader(
-            f"Upload Financial Statement (XLSX) for {r['company']}",
-            type="xlsx",
-            key=f"analysis_upload_{i}",
-            help="Upload financial statement with Value column and date columns (format: 31/12/2024)"
-        )
+        analysis_file = fs_df
         
         if analysis_file:
             try:
@@ -1553,6 +1548,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
