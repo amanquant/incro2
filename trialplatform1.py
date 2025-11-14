@@ -9,6 +9,8 @@ import io
 import os
 from contextlib import closing
 import dropbox
+from dotenv import load_dotenv
+import os
 
 # ============================================================================
 # CUSTOM STYLING - Modern Design with White Sidebar & Shadow
@@ -27,6 +29,7 @@ load_css(css_path)
 # DROPBOX API CONFIGURATION
 # ============================================================================
 # Try to get token from Streamlit secrets (production) or environment variable (local)
+load_dotenv()
 try:
     DROPBOX_TOKEN = st.secrets.get("dropbox_token", os.getenv("DROPBOX_TOKEN", None))
 except:
@@ -1550,4 +1553,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
