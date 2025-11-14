@@ -29,8 +29,7 @@ load_css(css_path)
 # DROPBOX API CONFIGURATION
 # ============================================================================
 # Try to get token from Streamlit secrets (production) or environment variable (local)
-load_dotenv()
-DROPBOX_TOKEN = os.getenv("DROPBOX_TOKEN")
+
 try:
     DROPBOX_TOKEN = st.secrets.get("dropbox_token", os.getenv("DROPBOX_TOKEN", None))
 except:
@@ -1554,6 +1553,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
