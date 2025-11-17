@@ -10,7 +10,8 @@ import os
 from contextlib import closing
 import dropbox
 from dotenv import load_dotenv
-import os
+import json
+import requests
 
 # ============================================================================
 # CUSTOM STYLING - Modern Design with White Sidebar & Shadow
@@ -26,16 +27,66 @@ css_path = pathlib.Path("style.css")
 load_css(css_path)
 
 # ============================================================================
-# DROPBOX API CONFIGURATION
+# DROPBOX API CONFIGURATION WITH TOKEN REFRESH
 # ============================================================================
-# Try to get token from Streamlit secrets (production) or environment variable (local)
-try:
-    DROPBOX_TOKEN = st.secrets.get("dropbox_token", os.getenv("DROPBOX_TOKEN", None))
-except:
-    DROPBOX_TOKEN = os.getenv("DROPBOX_TOKEN", None)
+# Loading the credentials as environmental variables
+load_dotenv()
 
-if not DROPBOX_TOKEN:
-    st.warning("⚠️ Dropbox token not configured. Please set DROPBOX_TOKEN in secrets or environment.")
+# Dropbox OAuth2 credentials (stored securely in environment variables)
+DROPBOX_APP_KEY = os.getenv("DROPBOX_APP_KEY")
+DROPBOX_APP_SECRET = os.getenv("DROPBOX_APP_SECRET")
+DROPBOX_REFRESH_TOKEN = os.getenv("DROPBOX_REFRESH_TOKEN")
+
+def retrieve_dropbox_access_token(app_key, app_secret, refresh_token):
+    """
+    This function uses the Dropbox App key/secret and a refresh token to authenticate the app through
+    the Dropbox API v2. It returns a freshly generated access token that can be used for the duration
+    of the user session.
+
+    Args:
+        app_key (str): Dropbox application key
+        app_secret (str): Dropbox application secret
+        refresh_token (str): Long-lived refresh token
+
+    Returns:
+        str: Fresh access token for current session
+    """
+    data = {
+        'refresh_token': refresh_token,
+        'grant_type': 'refresh_token',
+        'client_id': app_key,
+        'client_secret': app_secret,
+    }
+
+    try:
+        response = requests.post('https://api.dropbox.com/oauth2/token', data=data)
+        response.raise_for_status()
+        response_data = json.loads(response.text)
+        access_token = response_data["access_token"]
+        return access_token
+    except requests.exceptions.RequestException as e:
+        st.error(f"❌ Failed to retrieve Dropbox access token: {str(e)}")
+        return None
+
+# Generate access token at module load (internal, not exposed)
+DROPBOX_TOKEN = None
+if DROPBOX_APP_KEY and DROPBOX_APP_SECRET and DROPBOX_REFRESH_TOKEN:
+    DROPBOX_TOKEN = retrieve_dropbox_access_token(
+        DROPBOX_APP_KEY, 
+        DROPBOX_APP_SECRET, 
+        DROPBOX_REFRESH_TOKEN
+    )
+    if not DROPBOX_TOKEN:
+        st.warning("⚠️ Dropbox token could not be generated. Please check your credentials.")
+else:
+    # Fallback: Try to get token from Streamlit secrets or environment variable (backward compatibility)
+    try:
+        DROPBOX_TOKEN = st.secrets.get("dropbox_token", os.getenv("DROPBOX_TOKEN", None))
+    except:
+        DROPBOX_TOKEN = os.getenv("DROPBOX_TOKEN", None)
+
+    if not DROPBOX_TOKEN:
+        st.warning("⚠️ Dropbox token not configured. Please set DROPBOX credentials in environment.")
 
 # Dropbox file paths (not URLs)
 DROPBOX_PATHS = {
