@@ -101,8 +101,8 @@ DROPBOX_PATHS = {
 # CONFIGURATION CONSTANTS
 # ============================================================================
 COLUMNS_REQUIRED = [
-    "company", "nace", "ebit", "employees", "op_revenue" "net income", "capex", "d&a",
-    "changes in wc", "lt_debt", "st_debt", "sh_equity", "capital equity", "cash", "category_code"
+    "company", "nace", "ebit", "employees", "revenue", "net income", "capex", "d&a",
+    "changes in wc", "lt debt", "st debt", "sh equity", "capital equity", "cash", "category_code"
 ]
 
 COLUMNS_PORTFOLIO = [
@@ -1583,5 +1583,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
