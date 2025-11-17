@@ -7,3 +7,4 @@ numpy
 requests
 dropbox
 python-dotenv
+pathlib
